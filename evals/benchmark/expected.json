@@ -1,0 +1,19 @@
+{
+  "repo": "planted/shop",
+  "note": "Each planted problem is located by an anchor string, not a line number, so editing the fixture can't silently shift the answers. A finding matches when the file is the same, its line range (+/- 3) overlaps the anchor line (or the anchor plus `span` lines after it, for problems that live in a whole function body), and its category is one of the allowed ones.",
+  "planted": [
+    {"id": "sqli", "file": "app/db.py", "anchor": "WHERE name LIKE '%{name_query}%'", "categories": ["security"], "what": "SQL injection via f-string"},
+    {"id": "hardcoded-secret", "file": "app/auth.py", "anchor": "SECRET_KEY = \"", "categories": ["security"], "what": "signing key committed to source"},
+    {"id": "timing-compare", "file": "app/auth.py", "anchor": "if sig == expected:", "categories": ["security"], "what": "non-constant-time signature comparison"},
+    {"id": "no-expiry", "file": "app/auth.py", "anchor": "def verify(token):", "span": 9, "categories": ["security", "debt"], "what": "TOKEN_TTL is never enforced; tokens never expire"},
+    {"id": "shell-injection", "file": "app/handlers.py", "anchor": "shell=True", "categories": ["security"], "what": "user filename interpolated into a shell command"},
+    {"id": "pickle", "file": "app/handlers.py", "anchor": "pickle.loads(request.body)", "categories": ["security"], "what": "unsafe deserialization of request body"},
+    {"id": "unauth-checkout", "file": "app/handlers.py", "anchor": "user_id = auth.verify(", "categories": ["security", "debt"], "what": "None from verify() is not rejected; anonymous orders"},
+    {"id": "missing-product", "file": "app/db.py", "anchor": "total += row[2] * qty", "categories": ["debt"], "what": "unknown product id crashes with TypeError"},
+    {"id": "mutable-default", "file": "app/cache.py", "anchor": "def remember(key, value, store={}):", "categories": ["debt"], "what": "shared mutable default argument"},
+    {"id": "file-leak", "file": "app/cache.py", "anchor": "f = open(path)", "categories": ["debt"], "what": "file handle never closed"},
+    {"id": "no-assert", "file": "tests/test_db.py", "anchor": "db.find_products(\"lamp\")", "categories": ["tests"], "what": "test without assertions"},
+    {"id": "swallowed", "file": "tests/test_db.py", "anchor": "except Exception:", "categories": ["tests"], "what": "test swallows every exception, cannot fail"},
+    {"id": "pricing-untested", "file": "app/pricing.py", "anchor": "def apply_discount(", "span": 24, "categories": ["tests"], "what": "complex discount logic has no tests"}
+  ]
+}

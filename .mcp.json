@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "codebase-city-metrics": {
+      "command": ".venv/Scripts/python",
+      "args": ["-m", "mcp_servers.repo_metrics"]
+    },
+    "codebase-city-findings": {
+      "command": ".venv/Scripts/python",
+      "args": ["-m", "mcp_servers.findings"]
+    },
+    "codebase-city-github": {
+      "command": ".venv/Scripts/python",
+      "args": ["-m", "mcp_servers.github"]
+    }
+  }
+}

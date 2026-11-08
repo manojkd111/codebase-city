@@ -1,0 +1,20 @@
+{
+  "note": "Each case is something a user might ask an assistant connected to the three Codebase City MCP servers. expected is the tool that should be called first; any_of lists acceptable alternatives. args checks exact values for the listed keys.",
+  "cases": [
+    {"prompt": "Which repos have you ingested so far?", "expected": "list_repos"},
+    {"prompt": "What are the riskiest files in repo 3?", "expected": "get_hotspots", "args": {"repo_id": 3}},
+    {"prompt": "Show me the 5 worst hotspots in the src/flask district of repo 1, tests included.", "expected": "get_hotspots", "args": {"repo_id": 1, "limit": 5, "district": "src/flask", "include_tests": true}},
+    {"prompt": "How complex is src/click/core.py in repo 4, and how often has it changed lately?", "expected": "get_file_metrics", "args": {"repo_id": 4, "path": "src/click/core.py"}},
+    {"prompt": "In repo 2, what imports lib/router.js?", "expected": "get_import_neighbors", "args": {"repo_id": 2, "path": "lib/router.js"}},
+    {"prompt": "Give me a quick overview of how repo 1 is organised.", "expected": "get_city_summary", "args": {"repo_id": 1}},
+    {"prompt": "List the open security findings for repo 4.", "expected": "list_findings", "args": {"repo_id": 4, "status": "open", "category": "security"}},
+    {"prompt": "What did the agents find in pkg/core.py in repo 7?", "expected": "list_findings", "args": {"repo_id": 7, "file": "pkg/core.py"}},
+    {"prompt": "Show me the full evidence and suggested fix for finding 42.", "expected": "get_finding", "args": {"finding_id": 42}},
+    {"prompt": "Finding 17 is a false positive, mark it that way.", "expected": "set_finding_status", "args": {"finding_id": 17, "status": "rejected"}},
+    {"prompt": "I checked finding 9 and it's a real bug. Confirm it.", "expected": "set_finding_status", "args": {"finding_id": 9, "status": "confirmed"}},
+    {"prompt": "Has anyone generated a fix for finding 12 yet?", "expected": "list_fixes", "args": {"finding_id": 12}},
+    {"prompt": "Let me see the diff and test results for fix 5.", "expected": "get_fix", "args": {"fix_id": 5}},
+    {"prompt": "Fix 5 looks good, open the pull request for it.", "expected": "open_pull_request", "any_of": ["get_fix"], "args": {"fix_id": 5}},
+    {"prompt": "Is there anything critical I should look at first in repo 4?", "expected": "list_findings", "any_of": ["get_hotspots"], "args": {"repo_id": 4}}
+  ]
+}
