@@ -112,6 +112,7 @@ def make_plan(
     except Exception:
         plan = default_plan(cands, per_role)
         plan.usage = usage
+        cover_unassigned(plan, cands, per_role)
         add_tests_for_assigned(plan, files, imported_by)
         return plan
 
@@ -136,11 +137,33 @@ def make_plan(
             reasons[role] = fallback.reasons[role]
             used_fallback = True
     plan = Plan(assignments, reasons, used_fallback, usage)
+    cover_unassigned(plan, cands, per_role)
     add_tests_for_assigned(plan, files, imported_by)
     return plan
 
 
-MAX_TEST_FILES = 3
+COVERAGE_ROLE = "debt"
+
+
+def cover_unassigned(plan: Plan, cands: list[dict[str, Any]], per_role: int) -> None:
+    """Give the debt reviewer the files risky enough for a slot that nobody was assigned.
+
+    Ledger benchmark: 15 slots for 15 files, yet the coordinator doubled up on four files and left
+    four unreviewed, and three planted bugs sat in those four. The coordinator's picks are kept (any
+    rule for which double-up to drop loses something a reviewer found); the debt reviewer, the
+    generalist for correctness, takes up to `per_role` extra files instead. Deterministic: risk order.
+    """
+    budget = per_role * len(ROLES)
+    assigned = {p for r in ROLES for p in plan.assignments.get(r, [])}
+    missing = [c["path"] for c in cands[:budget] if c["path"] not in assigned][:per_role]
+    if not missing:
+        return
+    plan.assignments[COVERAGE_ROLE] = plan.assignments.get(COVERAGE_ROLE, []) + missing
+    note = f"Also covering {len(missing)} risky file(s) no reviewer was assigned."
+    plan.reasons[COVERAGE_ROLE] = (plan.reasons.get(COVERAGE_ROLE, "") + " " + note).strip()
+
+
+MAX_TEST_FILES = 6  # ledger benchmark: at 3 the weak test of a debt-reviewed module was never attached
 
 
 def add_tests_for_assigned(plan: Plan, files: list[dict[str, Any]], imported_by: dict[str, list[str]]) -> None:
@@ -158,6 +181,11 @@ def add_tests_for_assigned(plan: Plan, files: list[dict[str, Any]], imported_by:
     extra: list[str] = []
     for path in modules:
         for importer in imported_by.get(path, []):
-            if importer in tests and importer not in extra and importer not in assigned:
+            # conftest.py holds fixtures, not tests: it can't fail, so it shouldn't use up a slot.
+            if importer in tests and importer not in extra and importer not in assigned and not _is_conftest(importer):
                 extra.append(importer)
     plan.assignments["tests"] = assigned + extra[:MAX_TEST_FILES]
+
+
+def _is_conftest(path: str) -> bool:
+    return path.rsplit("/", 1)[-1] == "conftest.py"

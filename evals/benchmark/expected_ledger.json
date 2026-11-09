@@ -31,7 +31,8 @@
     {"id": "retry-untested", "file": "ledger/retry.py", "anchor": "def retry(attempts: int = 3", "span": 20, "categories": ["tests"], "what": "no test imports retry"},
     {"id": "refund-status-untested", "file": "ledger/refunds.py", "anchor": "def new_status(invoice, plan, payments: list[Payment]) -> str:", "span": 3, "categories": ["tests"], "what": "new_status is untested"},
     {"id": "db-untested", "file": "ledger/db.py", "anchor": "def list_invoices(customer_id: int", "span": 6, "categories": ["tests"], "what": "db is only ever mocked in tests"},
-    {"id": "export-untested", "file": "ledger/export.py", "anchor": "def invoices_csv(rows) -> str:", "span": 8, "categories": ["tests"], "what": "no test imports export"}
+    {"id": "export-untested", "file": "ledger/export.py", "anchor": "def invoices_csv(rows) -> str:", "span": 8, "categories": ["tests"], "what": "no test imports export"},
+    {"id": "refund-missing-invoice", "file": "ledger/api.py", "anchor": "def refund_invoice(request, invoice_id: int) -> Response:", "span": 10, "categories": ["debt", "security"], "what": "a missing invoice reaches calculate_refund as None and crashes on invoice.status"}
   ],
   "decoys": [
     {"id": "orderby-whitelist", "categories": ["security", "debt"], "file": "ledger/db.py", "anchor": "sql = f\"SELECT * FROM invoices WHERE customer_id = ? ORDER BY {sort} {direction}\"", "what": "f-string SQL, but sort is checked against ALLOWED_SORT and direction is one of two literals"},

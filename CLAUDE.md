@@ -4,8 +4,9 @@ Codebase City turns a GitHub repo into a 3D city; Claude agents inspect it and o
 Build plan: 6 phases over ~8 weeks. Current phase: **all phases built; tuning against live runs**.
 Reviews run on Sonnet 5.5 and fixes on Opus 5.5 (ADR 0009). Two planted-bug fixtures: `shop` is
 saturated (13/13, ~100% precision) and guards against regressions; `ledger` is the one to improve
-(baseline 9/14, 100% precision, 0/4 decoys). Its misses are mostly coverage: the coordinator leaves
-files unreviewed while doubling up on others. Next: coverage-aware planning, then more real repos.
+(9/14 at baseline, 12/14 with the coverage floor; 100% precision, 0/4 decoys). Remaining misses:
+security never gets `export.py` (CSV injection), and the tests reviewer reads a mock-only test
+without flagging it. Next: those two, then more real repos.
 
 ## Layout
 - `backend/ingest/`: deterministic analysis (clone, walk, tree-sitter, lizard, git churn, import graph)

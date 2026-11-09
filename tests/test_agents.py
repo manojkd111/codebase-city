@@ -242,15 +242,34 @@ def test_debt_reviewer_unused_slots_are_filled_with_the_next_hotspots():
     # Benchmark run 7: debt got 3 of 5 slots, skipped cache.py, and both bugs in it were missed.
     client = FakeClient({"coordinator": [plan_json(["c.py"], ["c.py"], ["c.py"])]}, agent_route)
     plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=2)
-    assert plan.assignments["debt"] == ["c.py", "a.py"]  # coordinator's pick first, then by risk
+    # Coordinator's pick first, then by risk; then b.py, which no reviewer had (coverage floor).
+    assert plan.assignments["debt"] == ["c.py", "a.py", "b.py"]
     assert plan.assignments["security"] == ["c.py"]  # other roles keep exactly what was picked
     assert not plan.used_fallback
+
+
+def test_files_no_reviewer_got_go_to_debt_but_picks_are_kept():
+    # Ledger benchmark: 15 slots for 15 files, yet 4 files got no reviewer while 4 got two.
+    client = FakeClient({"coordinator": [plan_json(["a.py"], ["a.py"], ["a.py"])]}, agent_route)
+    plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=1)
+    assert plan.assignments["security"] == ["a.py"] and plan.assignments["tests"] == ["a.py"]
+    assert plan.assignments["debt"] == ["a.py", "b.py"]  # b first by risk; c waits (cap: per_role extra)
+    assert "no reviewer was assigned" in plan.reasons["debt"]
+
+
+def test_conftest_never_uses_a_test_file_slot():
+    files = [*FILES, {**FILES[3], "path": "conftest.py"}]
+    imported_by = {"a.py": ["conftest.py", "test_a.py"]}
+    client = FakeClient({"coordinator": [plan_json(["a.py"], ["a.py"], ["a.py"])]}, agent_route)
+    plan = make_plan(client, model="m", effort="low", repo_name="r", files=files, imported_by=imported_by, per_role=3)
+    assert "test_a.py" in plan.assignments["tests"] and "conftest.py" not in plan.assignments["tests"]
 
 
 def test_coordinator_garbage_falls_back_entirely():
     client = FakeClient({"coordinator": [response(text("not json"))]}, agent_route)
     plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=1)
-    assert plan.used_fallback and all(v == ["a.py"] for v in plan.assignments.values())
+    assert plan.used_fallback and plan.assignments["security"] == plan.assignments["tests"] == ["a.py"]
+    assert plan.assignments["debt"] == ["a.py", "b.py"]  # coverage floor: at most per_role extra
 
 
 # ---- full run ------------------------------------------------------------------------------

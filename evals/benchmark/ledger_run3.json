@@ -1,0 +1,218 @@
+{
+  "fixture": "ledger",
+  "hotspot_k": 8,
+  "hotspot_recall": 0.875,
+  "recall": 0.8571428571428571,
+  "precision_floor": 0.9411764705882353,
+  "matched": {
+    "float-cents": 14,
+    "transfer-race": 15,
+    "role-substring": 1,
+    "void-idor": 0,
+    "late-fee-repeat": 9,
+    "region-case": 11,
+    "webhook-replay": 3,
+    "page-offset": 12,
+    "retry-swallow": 13,
+    "weak-token": 2,
+    "refunds-untested": 5,
+    "always-true-assert": 4
+  },
+  "known_real": {
+    "from-row-drops-fields": 10,
+    "retry-untested": 6,
+    "db-untested": 7,
+    "export-untested": 8
+  },
+  "missed": [
+    "csv-injection",
+    "mock-only-test"
+  ],
+  "decoy_hits": {},
+  "findings": [
+    {
+      "file": "ledger/api.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 48,
+      "line_end": 51,
+      "title": "void_invoice lacks ownership check (IDOR)"
+    },
+    {
+      "file": "ledger/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "Role check uses substring match on comma-separated string"
+    },
+    {
+      "file": "ledger/tokens.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 9,
+      "title": "Unauthenticated payment-link token generated with non-cryptographic PRNG"
+    },
+    {
+      "file": "ledger/webhooks.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 19,
+      "line_end": 23,
+      "title": "Webhook timestamp is not covered by the HMAC, so replay protection is ineffective"
+    },
+    {
+      "file": "tests/test_api.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 28,
+      "line_end": 28,
+      "title": "test_list_invoices assertion is always true"
+    },
+    {
+      "file": "ledger/refunds.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 21,
+      "line_end": 49,
+      "title": "Refund calculation and eligibility rules have no tests"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 25,
+      "title": "retry decorator has no tests for attempt count, backoff, or exhaustion behaviour"
+    },
+    {
+      "file": "ledger/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 18,
+      "line_end": 38,
+      "title": "DB layer (sort allowlist, get/save invoice) is never tested against a database"
+    },
+    {
+      "file": "ledger/export.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 10,
+      "line_end": 25,
+      "title": "CSV and PDF export have no tests"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 57,
+      "line_end": 62,
+      "title": "Late fee is re-applied on every nightly run (late_fee_applied never checked or set)"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 40,
+      "line_end": 48,
+      "title": "from_row/save_invoice drop paid_on, so non-chargeback refunds always fail with \"window closed\""
+    },
+    {
+      "file": "ledger/tax.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 14,
+      "line_end": 15,
+      "title": "Tax lookup uses lower-case keys but regions are stored upper-case, so tax is always 0"
+    },
+    {
+      "file": "ledger/pagination.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Off-by-one: 1-based pages skip the first page"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 18,
+      "line_end": 20,
+      "title": "retry swallows the final error and returns None instead of re-raising"
+    },
+    {
+      "file": "ledger/money.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 8,
+      "title": "to_cents truncates floats, producing off-by-one-cent amounts"
+    },
+    {
+      "file": "ledger/accounts.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 29,
+      "line_end": 32,
+      "title": "transfer is unsynchronized: race allows overdraft and lost updates"
+    },
+    {
+      "file": "ledger/api.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 57,
+      "line_end": 63,
+      "title": "refund_invoice doesn't handle missing invoice or RefundError"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "ledger/api.py",
+        "ledger/auth.py",
+        "ledger/db.py",
+        "ledger/webhooks.py",
+        "ledger/tokens.py"
+      ],
+      "reason": "Request handling, auth, SQL/DB helpers, webhook intake and token handling are the places untrusted input and credentials are most likely to be mishandled."
+    },
+    "tests": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/db.py",
+        "ledger/money.py",
+        "ledger/retry.py",
+        "ledger/export.py",
+        "tests/test_money.py",
+        "tests/test_api.py",
+        "tests/test_auth.py",
+        "tests/test_webhooks.py",
+        "tests/test_invoices.py",
+        "tests/test_accounts.py"
+      ],
+      "reason": "Complex or widely used modules with no test importers (refunds, db, retry, export) plus money arithmetic with only one test importer; these are likely untested behaviours."
+    },
+    "debt": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/invoices.py",
+        "ledger/api.py",
+        "ledger/money.py",
+        "ledger/retry.py",
+        "ledger/accounts.py",
+        "ledger/config.py",
+        "ledger/customers.py",
+        "ledger/pagination.py",
+        "ledger/tax.py"
+      ],
+      "reason": "Highest cyclomatic complexity and branching logic (refunds ccn_max 13, retry, money rounding) are the most defect-prone, plus invoices and api with the most functions. Also covering 5 risky file(s) no reviewer was assigned."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 107357,
+  "output_tokens": 12919,
+  "cache_read_tokens": 70539,
+  "cost_usd": 0.2353
+}
