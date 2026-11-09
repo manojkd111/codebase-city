@@ -105,7 +105,7 @@ def test_registry_dedupes_the_same_problem_across_agents(fixture_repo):
     assert not debt.run("submit_finding", GOOD).is_error
     sec, sec_stored = boxes["security"]
     dup = sec.run("submit_finding", {**GOOD, "category": "security", "title": "same bug, other angle"})
-    assert dup.is_error and "finding #1 from the debt reviewer covers overlapping lines" in dup.content
+    assert dup.is_error and "overlapping lines: #1 from the debt reviewer" in dup.content
     assert sec_stored == [] and sec.duplicates == 1 and sec.rejected == 0
     # A deliberate resubmission means "this is a different problem": the agent decides, so it's stored.
     again = sec.run("submit_finding", {**GOOD, "category": "security", "title": "same bug, other angle"})
@@ -120,19 +120,23 @@ def test_a_rerun_is_told_about_earlier_runs_findings(fixture_repo):
     # Rerunning itsdangerous stored the same problems again: 29 open findings over 3 runs.
     from backend.agents.tools import FindingRegistry
 
-    def prior(fid, status, start=7, end=9):
-        return {"id": fid, "category": "debt", "file": "pkg/core.py", "line_start": start, "line_end": end} | {
+    def prior(fid, status, category="debt"):
+        return {"id": fid, "category": category, "file": "pkg/core.py", "line_start": 7, "line_end": 9} | {
             "title": f"earlier {fid}",
             "status": status,
         }
 
     registry = FindingRegistry()
-    registry.seed_prior([prior(40, "fixed"), prior(41, "rejected")])
+    # #39 is a security finding on the same lines (a different problem) and comes first. Live run 11:
+    # only #39 was named, the agent rightly resubmitted, and the stored result repeated #41.
+    registry.seed_prior([prior(39, "open", "security"), prior(40, "fixed"), prior(41, "rejected")])
     tb, stored = _toolbox(fixture_repo, "debt")
     tb.registry = registry
     dup = tb.run("submit_finding", GOOD)
-    assert dup.is_error and "#41 from an earlier run (dismissed by a human)" in dup.content
-    assert stored == [] and tb.duplicates == 1  # the fixed #40 is not held against it
+    assert dup.is_error and "#39 from an earlier run (open)" in dup.content
+    assert "#41 from an earlier run (dismissed by a human)" in dup.content  # every overlap is named
+    assert "#40" not in dup.content  # fixed findings are not held against it
+    assert stored == [] and tb.duplicates == 1
     assert not tb.run("submit_finding", GOOD).is_error and len(stored) == 1  # deliberate resubmission
 
 

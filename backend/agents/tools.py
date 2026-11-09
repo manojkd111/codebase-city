@@ -121,9 +121,14 @@ OVERLAPPING_ROLES = {"security", "debt"}
 
 
 class PossibleDuplicate(Exception):
-    def __init__(self, existing_id: int, source: str, title: str) -> None:
-        super().__init__(f"#{existing_id}")
-        self.existing_id, self.source, self.title = existing_id, source, title
+    """Every stored finding the submission overlaps, as (id, source, title). All of them are named at
+    once: a resubmission is the agent saying "different from these", so it must have seen them all.
+    (Live run 11: only the first overlap was named, the agent rightly said "different", and the
+    resubmission skipped past an exact repeat further down the list.)"""
+
+    def __init__(self, matches: list[tuple[int, str, str]]) -> None:
+        super().__init__(", ".join(f"#{m[0]}" for m in matches))
+        self.matches = matches
 
 
 # Earlier runs' findings that a rerun should not repeat. Dismissed ones count: a human already said
@@ -170,9 +175,13 @@ class FindingRegistry:
         key = (f.category, f.file, f.line_start, f.line_end)
         with self._lock:
             if not force:
-                for cat, file, start, end, fid, title, source in self._entries:
-                    if self.overlaps(key, (cat, file, start, end)):
-                        raise PossibleDuplicate(fid, source, title)
+                matches = [
+                    (fid, source, title)
+                    for cat, file, start, end, fid, title, source in self._entries
+                    if self.overlaps(key, (cat, file, start, end))
+                ]
+                if matches:
+                    raise PossibleDuplicate(matches)
             fid = store(f)
             self._entries.append((*key, fid, f.title, f"the {f.category} reviewer"))
             return fid
@@ -259,10 +268,11 @@ class ToolBox:
         except PossibleDuplicate as d:
             self._flagged.add(attempt)
             self.duplicates += 1
+            listed = "; ".join(f"#{fid} from {source}: {title!r}" for fid, source, title in d.matches)
             return ToolResult(
-                f"Not stored yet: finding #{d.existing_id} from {d.source} covers overlapping lines: "
-                f"{d.title!r}. If yours is the same problem, move on. If it is a different problem, submit it "
-                "again unchanged and it will be stored.",
+                f"Not stored yet: these findings cover overlapping lines: {listed}. If yours is the same "
+                "problem as any of them, move on. If it is different from all of them, submit it again "
+                "unchanged and it will be stored.",
                 is_error=True,
             )
         self._seen.add(key)  # only once actually stored, so a flagged overlap can still be resubmitted
