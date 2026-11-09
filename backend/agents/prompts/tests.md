@@ -13,4 +13,5 @@ specialists, so don't restate one as "X is untested, and X is broken". If untest
 buggy, report the gap only when it matters beyond that bug (critical or complex logic with no tests
 at all), and write the title and description about the behaviour no test protects and the cases
 that are missing, without describing the defect. Prefer one finding per untested function or module
-over one per branch. Tests that cannot fail are always yours to report.
+over one per branch. Tests that cannot fail are always yours to report, one finding per test, citing
+that test's own lines: each needs its own fix, so don't merge them.

@@ -1,0 +1,216 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 1.0,
+  "precision_floor": 0.7894736842105263,
+  "matched": {
+    "sqli": 4,
+    "hardcoded-secret": 0,
+    "timing-compare": 10,
+    "no-expiry": 1,
+    "shell-injection": 2,
+    "pickle": 3,
+    "unauth-checkout": 5,
+    "missing-product": 8,
+    "mutable-default": 6,
+    "file-leak": 7,
+    "no-assert": 13,
+    "swallowed": 12,
+    "pricing-untested": 14
+  },
+  "known_real": {
+    "shared-conn": 9,
+    "stored-pre-discount": 11
+  },
+  "missed": [],
+  "findings": [
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded token signing key in source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "Non-constant-time signature comparison"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 13,
+      "line_end": 13,
+      "title": "Shell command injection via filename in make_thumbnail"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 15,
+      "line_end": 15,
+      "title": "SQL injection in product search"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "Checkout does not reject unauthenticated requests"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes all callers share one cache dict"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 10,
+      "line_end": 13,
+      "title": "File handle never closed in load_snapshot"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "add_order crashes on unknown product and accepts any quantity"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 6,
+      "line_end": 10,
+      "title": "Lazy global connection is shared across threads without locking"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 16,
+      "line_end": 24,
+      "title": "Token expiry never enforced"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 25,
+      "line_end": 26,
+      "title": "Checkout persists the undiscounted total but returns the discounted one"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing cannot fail (swallows all exceptions, no assertion)"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion on results"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "Discount and shipping pricing logic has no tests"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 24,
+      "title": "Token sign/verify has no tests"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 7,
+      "line_end": 26,
+      "title": "Request handlers (search, thumbnail, cart restore, checkout) have no tests"
+    },
+    {
+      "file": "app/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 32,
+      "title": "add_order total computation and persistence are untested"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 5,
+      "line_end": 18,
+      "title": "Cache helpers (remember, load_snapshot, recent) have no tests"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/auth.py",
+        "app/handlers.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Auth, request handlers, database access and cache code are the most likely places for untrusted input to cause injection, authentication bypass or unsafe deserialization."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "app/db.py",
+        "tests/test_db.py"
+      ],
+      "reason": "Pricing has the highest complexity and no test importers; auth, handlers and cache also have no importing tests, and db has only partial coverage."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/cache.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/handlers.py"
+      ],
+      "reason": "Pricing has the highest cyclomatic complexity (max 12), so it is the most likely place for bugs; cache, auth and db have moderate branching worth checking for defects."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 63954,
+  "output_tokens": 12630,
+  "cache_read_tokens": 47191,
+  "cost_usd": 0.1776
+}

@@ -45,6 +45,7 @@ def prompt(name: str, **values: str) -> str:
 # they're rare, so costs are computed at the configured model's prices.
 PRICES: dict[str, tuple[float, float, float, float]] = {
     "claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
+    "claude-sonnet-5-5": (2.00, 10.00, 2.50, 0.20),
 }
 
 
