@@ -170,7 +170,9 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
             if repo.status != "ready":
                 raise HTTPException(409, "The city must finish building before agents can inspect it.")
             active = s.scalar(
-                select(AnalysisRun).where(AnalysisRun.repo_id == repo_id, AnalysisRun.status.in_(("queued", "running")))
+                select(AnalysisRun).where(
+                    AnalysisRun.repo_id == repo_id, AnalysisRun.status.in_(("queued", "running", "stopping"))
+                )
             )
             if active:
                 raise HTTPException(409, f"Analysis run {active.id} is already in progress.")
@@ -180,6 +182,20 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
             run_id = run.id
         await jobs().analyze(run_id)
         return {"run_id": run_id, "status": "queued", "events": f"/ws/repos/{repo_id}"}
+
+    @app.post("/api/analyses/{run_id}/stop", status_code=202)
+    def stop_analysis(run_id: int) -> dict:
+        """Ask a run to stop. Each agent finishes the turn it's on (seconds) and stops; findings so far
+        are kept. The run reports `analysis.cancelled` on the event stream once it has stopped."""
+        with sessions() as s:
+            run = s.get(AnalysisRun, run_id)
+            if run is None:
+                raise HTTPException(404, "Analysis run not found.")
+            if run.status not in ("queued", "running", "stopping"):
+                raise HTTPException(409, f"Analysis run {run_id} has already ended ({run.status}).")
+            run.status = "stopping"
+            s.commit()
+        return {"run_id": run_id, "status": "stopping"}
 
     @app.get("/api/repos/{repo_id}/analysis")
     def latest_analysis(repo_id: int) -> dict | None:

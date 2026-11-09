@@ -33,6 +33,8 @@ const send = <T>(method: string, url: string, body?: unknown) =>
 
 export const getConfig = () => fetch("/api/config").then((r) => json<ServerConfig>(r));
 export const startAnalysis = (repoId: number) => send<{ run_id: number }>("POST", `/api/repos/${repoId}/analyze`);
+export const stopAnalysis = (runId: number) =>
+  send<{ run_id: number; status: string }>("POST", `/api/analyses/${runId}/stop`);
 export const listFindings = (repoId: number) => fetch(`/api/repos/${repoId}/findings`).then((r) => json<Finding[]>(r));
 export const setFindingStatus = (id: number, status: "open" | "confirmed" | "rejected") =>
   send<Finding>("PATCH", `/api/findings/${id}`, { status });

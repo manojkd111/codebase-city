@@ -84,7 +84,7 @@ export interface FixState {
 
 export interface AnalysisState {
   runId: number;
-  status: "running" | "done" | "failed";
+  status: "running" | "done" | "cancelled" | "failed";
   model: string;
   findings: number;
   tokensIn: number;
@@ -354,16 +354,20 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
           roleOf(e.data.agent_id),
           e.data.error
             ? `Stopped: ${e.data.error}`
-            : `Done in ${e.data.turns} turns: ${e.data.findings} findings, ${e.data.rejected} rejected by verification`,
+            : e.data.stopped
+              ? `Stopped on request after ${e.data.turns} turns: ${e.data.findings} findings kept`
+              : `Done in ${e.data.turns} turns: ${e.data.findings} findings, ${e.data.rejected} rejected by verification`,
           e.data.error ? "error" : "ok",
         );
         break;
       }
       case "analysis.completed":
+      case "analysis.cancelled": {
+        const cancelled = e.type === "analysis.cancelled";
         if (s.analysis)
           s.analysis = {
             ...s.analysis,
-            status: "done",
+            status: cancelled ? "cancelled" : "done",
             findings: e.data.findings,
             tokensIn: e.data.input_tokens,
             tokensOut: e.data.output_tokens,
@@ -373,10 +377,13 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
         log(
           null,
           "coordinator",
-          `Run complete: ${e.data.findings} findings in ${e.data.duration_s.toFixed(0)}s`,
-          "ok",
+          cancelled
+            ? `Run stopped on request after ${e.data.duration_s.toFixed(0)}s: ${e.data.findings} findings kept`
+            : `Run complete: ${e.data.findings} findings in ${e.data.duration_s.toFixed(0)}s`,
+          cancelled ? "warn" : "ok",
         );
         break;
+      }
       case "analysis.failed":
         if (s.analysis) s.analysis = { ...s.analysis, status: "failed", error: e.data.error };
         log(null, "coordinator", `Run failed: ${e.data.error}`, "error");

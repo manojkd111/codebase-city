@@ -120,7 +120,8 @@ class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
     id: Mapped[int] = mapped_column(primary_key=True)
     repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id", ondelete="CASCADE"), index=True)
-    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued|running|done|failed
+    # queued|running|stopping|done|cancelled|failed; "stopping" is a request the run polls between turns
+    status: Mapped[str] = mapped_column(String(20), default="queued")
     model: Mapped[str] = mapped_column(String(100))
     error: Mapped[str | None] = mapped_column(Text)
     plan: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # role -> {files, reason}

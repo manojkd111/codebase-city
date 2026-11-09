@@ -202,8 +202,12 @@ button {
 .pill-queued {
   color: var(--warn);
 }
-.pill-failed {
+.pill-failed,
+.pill-stopping {
   color: var(--danger);
+}
+.pill-cancelled {
+  color: var(--muted);
 }
 
 .stats {
@@ -854,6 +858,28 @@ pre.source-code {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.run-actions {
+  display: flex;
+  gap: 8px;
+}
+.run-actions button.primary {
+  flex: 1;
+}
+button.danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+button.danger:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 .stats4 {
   display: grid;

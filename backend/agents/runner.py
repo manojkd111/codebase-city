@@ -19,6 +19,7 @@ from backend.db.models import AnalysisRun, File, Finding, ImportEdge, Repo
 from backend.events.schema import (
     AgentDispatched,
     AgentFinished,
+    AnalysisCancelled,
     AnalysisCompleted,
     AnalysisFailed,
     AnalysisStarted,
@@ -91,10 +92,43 @@ def execute_analysis(
         repo = s.get(Repo, run.repo_id)
         repo_id, source, name, sha = repo.id, repo.source, repo.name or repo.source, repo.commit_sha or ""
         files, imports, imported_by = load_repo_facts(s, repo_id)
-        run.status = "running"
+        stopped_while_queued = run.status == "stopping"
+        if not stopped_while_queued:
+            run.status = "running"
         s.commit()
 
     emit = RunRecorder(repo_id, sessions, publish)
+
+    def stop_requested() -> bool:
+        # Read from the database, not memory: with REDIS_URL the run is in another process (ADR 0007).
+        with sessions() as s:
+            return s.scalar(select(AnalysisRun.status).where(AnalysisRun.id == run_id)) == "stopping"
+
+    def finish(results: list[SpecialistResult], usage: llm.Usage, *, cancelled: bool) -> list[SpecialistResult]:
+        total = sum((r.usage for r in results), usage)
+        with sessions() as s:
+            run = s.get(AnalysisRun, run_id)
+            run.status = "cancelled" if cancelled else "done"
+            run.input_tokens, run.output_tokens = total.input_tokens, total.output_tokens
+            run.finished_at = datetime.now(UTC)
+            s.commit()
+        event = AnalysisCancelled if cancelled else AnalysisCompleted
+        emit(
+            event(
+                run_id=run_id,
+                findings=sum(len(r.finding_ids) for r in results),
+                duration_s=round(time.monotonic() - started, 2),
+                input_tokens=total.input_tokens,
+                output_tokens=total.output_tokens,
+                cache_read_tokens=total.cache_read,
+                cost_usd=total.cost_usd(settings.model),
+            )
+        )
+        return results
+
+    if stopped_while_queued:
+        return finish([], llm.Usage(), cancelled=True)
+
     emit(AnalysisStarted(run_id=run_id, model=settings.model))
     results: list[SpecialistResult] = []
     try:
@@ -111,6 +145,8 @@ def execute_analysis(
         with sessions() as s:
             s.get(AnalysisRun, run_id).plan = plan.to_json()
             s.commit()
+        if stop_requested():  # stopped while the coordinator was planning: don't clone or dispatch
+            return finish([], plan.usage, cancelled=True)
 
         metrics = {f["path"]: {k: v for k, v in f.items() if k != "path"} for f in files}
         allow = settings.allow_local_sources if allow_local is None else allow_local
@@ -179,6 +215,7 @@ def execute_analysis(
                     commit=sha,
                     toolbox=toolbox,
                     emit=emit,
+                    should_stop=stop_requested,
                 )
                 emit(
                     AgentFinished(
@@ -192,6 +229,7 @@ def execute_analysis(
                         error=r.error,
                         cache_read_tokens=r.usage.cache_read,
                         cost_usd=r.usage.cost_usd(settings.model),
+                        stopped=r.stopped,
                     )
                 )
                 return r
@@ -199,27 +237,8 @@ def execute_analysis(
             with ThreadPoolExecutor(max_workers=max(1, settings.max_concurrent_agents)) as pool:
                 results = list(pool.map(work, jobs))
 
-        total = sum((r.usage for r in results), plan.usage)
-        total_in, total_out = total.input_tokens, total.output_tokens
-        n_findings = sum(len(r.finding_ids) for r in results)
-        with sessions() as s:
-            run = s.get(AnalysisRun, run_id)
-            run.status = "done"
-            run.input_tokens, run.output_tokens = total_in, total_out
-            run.finished_at = datetime.now(UTC)
-            s.commit()
-        emit(
-            AnalysisCompleted(
-                run_id=run_id,
-                findings=n_findings,
-                duration_s=round(time.monotonic() - started, 2),
-                input_tokens=total_in,
-                output_tokens=total_out,
-                cache_read_tokens=total.cache_read,
-                cost_usd=total.cost_usd(settings.model),
-            )
-        )
-        return results
+        # A stop that arrived after every agent had finished on its own changed nothing: that run is done.
+        return finish(results, plan.usage, cancelled=any(r.stopped for r in results))
     except Exception as exc:
         log.exception("analysis %s failed", run_id)
         message = str(exc)[:1000] or type(exc).__name__

@@ -179,6 +179,29 @@ describe("live agent activity", () => {
     expect(old.analysis!.costUsd).toBeNull();
   });
 
+  it("marks a run stopped on request as cancelled, keeping its findings and cost", () => {
+    const s = applyEvents(
+      base,
+      [
+        env(1, "analysis.started", { run_id: 1, model: "m" }),
+        env(2, "agent.dispatched", { run_id: 1, agent_id: "debt-1", role: "debt", files: [], reason: "" }),
+        env(3, "agent.finished", {
+          run_id: 1, agent_id: "debt-1", findings: 2, rejected: 0, turns: 4,
+          input_tokens: 900, output_tokens: 90, error: null, cost_usd: 0.12, stopped: true,
+        }),
+        env(4, "analysis.cancelled", {
+          run_id: 1, findings: 2, duration_s: 30, input_tokens: 900, output_tokens: 90, cost_usd: 0.12,
+        }),
+      ],
+      0,
+    );
+    expect(s.analysis).toMatchObject({ status: "cancelled", findings: 2, costUsd: 0.12, durationS: 30 });
+    expect(s.agents["debt-1"].status).toBe("done"); // its drone flies home with the others
+    const texts = s.activity.map((a) => a.text);
+    expect(texts).toContain("Stopped on request after 4 turns: 2 findings kept");
+    expect(s.activity.at(-1)).toMatchObject({ tone: "warn" });
+  });
+
   it("caps the activity log", () => {
     const evs = [env(1, "analysis.started", { run_id: 1, model: "m" })];
     for (let i = 0; i < 500; i++)

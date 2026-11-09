@@ -29,6 +29,11 @@ class SpecialistResult:
     summary: str = ""
     usage: llm.Usage = field(default_factory=llm.Usage)
     error: str | None = None
+    stopped: bool = False  # a stop was requested before the review finished
+
+
+def never() -> bool:
+    return False
 
 
 def run_specialist(
@@ -45,7 +50,10 @@ def run_specialist(
     commit: str,
     toolbox: ToolBox,
     emit: Callable[[Payload], Any],
+    should_stop: Callable[[], bool] = never,
 ) -> SpecialistResult:
+    """`should_stop` is checked before every model call: a stop takes effect between turns, so the
+    turn in flight finishes (seconds) and nothing is left half-done."""
     result = SpecialistResult(agent_id=agent_id, role=role)
     system = (
         llm.prompt(
@@ -65,6 +73,10 @@ def run_specialist(
 
     try:
         for turn in range(1, max_turns + 1):
+            if should_stop():
+                result.stopped = True
+                result.summary = "Stopped on request."
+                break
             result.turns = turn
             t0 = time.monotonic()
             response = llm.create(client, model=model, effort=effort, system=system, tools=tools, messages=messages)

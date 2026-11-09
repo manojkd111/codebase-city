@@ -170,6 +170,7 @@ class AgentFinished(Payload):
     error: str | None = None
     cache_read_tokens: int = 0
     cost_usd: float | None = None
+    stopped: bool = False  # stopped on request before finishing its review
 
 
 class AnalysisCompleted(Payload):
@@ -181,6 +182,19 @@ class AnalysisCompleted(Payload):
     output_tokens: int
     cache_read_tokens: int = 0
     cost_usd: float | None = None  # whole run, coordinator included
+
+
+class AnalysisCancelled(Payload):
+    """Stopped on request. Findings already stored are kept: each was verified when it was submitted."""
+
+    TYPE: ClassVar[str] = "analysis.cancelled"
+    run_id: int
+    findings: int
+    duration_s: float
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int = 0
+    cost_usd: float | None = None  # what the run cost up to the stop
 
 
 class AnalysisFailed(Payload):
@@ -254,6 +268,7 @@ PAYLOAD_TYPES: dict[str, type[Payload]] = {
         AgentToolCall,
         AgentFinished,
         AnalysisCompleted,
+        AnalysisCancelled,
         AnalysisFailed,
         FindingUpdated,
         FixStarted,

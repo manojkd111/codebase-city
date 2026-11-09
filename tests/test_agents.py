@@ -262,6 +262,84 @@ def test_full_analysis_run_streams_drone_events_and_stores_verified_findings(tmp
     assert len(debt_calls[2]["messages"]) == 5  # user, assistant, results, assistant, results
 
 
+def _request_stop(sessions, run_id):
+    with sessions() as s:
+        s.get(AnalysisRun, run_id).status = "stopping"  # what POST /api/analyses/{id}/stop does
+        s.commit()
+
+
+def test_stop_takes_effect_between_turns_and_keeps_verified_findings(tmp_path, fixture_repo):
+    settings, sessions, repo_id, run_id = _setup(tmp_path, fixture_repo)
+
+    def submit_then_stop(_kwargs):
+        # The user presses Stop while this turn is in flight: the turn still completes.
+        _request_stop(sessions, run_id)
+        return response(tool("submit_finding", GOOD))
+
+    never_sent = response(tool("read_file", {"path": "pkg/util.py", "start_line": 1, "end_line": 0}))
+    client = FakeClient(
+        {
+            "coordinator": [plan_json(["pkg/core.py"], ["pkg/util.py"], ["pkg/core.py"])],
+            "debt": [submit_then_stop, never_sent],
+        },
+        agent_route,
+    )
+    results = execute_analysis(run_id, settings, sessions, client=client, allow_local=True)
+
+    debt = next(r for r in results if r.role == "debt")
+    assert debt.stopped and debt.turns == 1 and len(debt.finding_ids) == 1
+    assert len([c for c in client.calls if agent_route(c) == "debt"]) == 1  # no turn after the stop
+    with sessions() as s:
+        run = s.get(AnalysisRun, run_id)
+        events = [
+            (e.type, e.data)
+            for e in s.scalars(select(EventRow).where(EventRow.repo_id == repo_id).order_by(EventRow.seq))
+        ]
+        kept = s.scalars(select(Finding).where(Finding.run_id == run_id)).all()
+    assert run.status == "cancelled" and run.finished_at is not None
+    assert [f.title for f in kept] == [GOOD["title"]]  # verified before the stop, so it stays
+    types = [t for t, _ in events]
+    assert types[-1] == "analysis.cancelled" and "analysis.completed" not in types
+    finished = next(d for t, d in events if t == "agent.finished" and d["agent_id"].startswith("debt"))
+    assert finished["stopped"] is True
+    assert events[-1][1]["findings"] == 1 and events[-1][1]["cost_usd"] > 0  # what it cost up to the stop
+
+
+def test_a_run_stopped_while_queued_never_starts(tmp_path, fixture_repo):
+    settings, sessions, repo_id, run_id = _setup(tmp_path, fixture_repo)
+    _request_stop(sessions, run_id)
+    client = FakeClient({}, agent_route)
+    assert execute_analysis(run_id, settings, sessions, client=client, allow_local=True) == []
+    assert client.calls == []  # not even the coordinator
+    with sessions() as s:
+        types = [e.type for e in s.scalars(select(EventRow).where(EventRow.repo_id == repo_id).order_by(EventRow.seq))]
+        assert s.get(AnalysisRun, run_id).status == "cancelled"
+    assert types[-1] == "analysis.cancelled" and "analysis.started" not in types
+
+
+def test_a_stop_after_every_agent_finished_still_counts_as_done(tmp_path, fixture_repo, monkeypatch):
+    import threading
+
+    import backend.agents.runner as runner
+
+    settings, sessions, repo_id, run_id = _setup(tmp_path, fixture_repo)
+    client = FakeClient({"coordinator": [plan_json(["pkg/core.py"], ["pkg/util.py"], ["pkg/core.py"])]}, agent_route)
+    original, lock, finished = runner.run_specialist, threading.Lock(), []
+
+    def stop_after_the_last_agent(*a, **kw):
+        r = original(*a, **kw)  # each agent answers in one turn
+        with lock:
+            finished.append(r)
+            if len(finished) == 3:  # agents run in parallel: only the last one to return requests the stop
+                _request_stop(sessions, run_id)
+        return r
+
+    monkeypatch.setattr(runner, "run_specialist", stop_after_the_last_agent)
+    execute_analysis(run_id, settings, sessions, client=client, allow_local=True)
+    with sessions() as s:
+        assert s.get(AnalysisRun, run_id).status == "done"
+
+
 def test_usage_prices_cached_input_at_the_cache_rate():
     from types import SimpleNamespace
 

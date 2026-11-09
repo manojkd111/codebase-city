@@ -177,10 +177,24 @@ export type CityEvent =
         error: string | null;
         cache_read_tokens?: number;
         cost_usd?: number | null;
+        stopped?: boolean;
       };
     }
   | {
       type: "analysis.completed";
+      data: {
+        run_id: number;
+        findings: number;
+        duration_s: number;
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_tokens?: number;
+        cost_usd?: number | null;
+      };
+    }
+  | {
+      // Stopped on request; findings already stored are kept.
+      type: "analysis.cancelled";
       data: {
         run_id: number;
         findings: number;

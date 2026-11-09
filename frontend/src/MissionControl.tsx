@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { listFixes, openPullRequest, setFindingStatus, startAnalysis, startFix } from "./api";
+import { listFixes, openPullRequest, setFindingStatus, startAnalysis, startFix, stopAnalysis } from "./api";
 import { FIXER_COLOR, ROLE_COLOR, SEVERITY_COLOR } from "./Agents3D";
 import type { Finding, FindingStatus, Fix, Role, ServerConfig } from "./types";
 import type { ActivityEntry, AgentState, CityState, FixState } from "./useCityStream";
@@ -59,6 +59,9 @@ export function MissionControl(p: Props) {
   const [busy, setBusy] = useState(false);
   const a = p.city.analysis;
   const running = a?.status === "running";
+  // Set when Stop is pressed; the run confirms with analysis.cancelled once its agents have stopped.
+  const [stoppingRun, setStoppingRun] = useState<number | null>(null);
+  const stopping = running && stoppingRun === a?.runId;
   const fixesRunning = Object.values(p.city.fixes).some((f) => f.status === "running");
   const now = useNow(running || fixesRunning);
   const selected = p.findings.find((f) => f.id === p.selectedFinding) ?? null;
@@ -77,23 +80,55 @@ export function MissionControl(p: Props) {
     }
   };
 
+  const stop = async () => {
+    if (!a) return;
+    const ok = window.confirm(
+      "Stop this run?\n\nEach agent finishes the turn it's on (a few seconds), then stops. Findings found so far are kept.",
+    );
+    if (!ok) return;
+    setError(null);
+    setStoppingRun(a.runId);
+    try {
+      await stopAnalysis(a.runId);
+    } catch (e) {
+      setStoppingRun(null);
+      setError((e as Error).message);
+    }
+  };
+
   const noKey = p.config && !p.config.llm_credentials;
+  const pill = stopping ? "stopping" : a?.status;
   return (
     <div className="mc">
       <header className="mc-head">
         <h2>Mission Control</h2>
-        {a && <span className={`pill pill-${a.status === "done" ? "ready" : a.status}`}>{a.status}</span>}
+        {a && <span className={`pill pill-${pill === "done" ? "ready" : pill}`}>{pill}</span>}
       </header>
 
       <section className="runbar">
-        <button
-          className="primary"
-          onClick={dispatch}
-          disabled={busy || running || p.city.status !== "ready"}
-          title={p.city.status !== "ready" ? "Wait for the city to finish building" : undefined}
-        >
-          {running ? "Agents are working…" : a ? "Run agents again" : "Dispatch agents"}
-        </button>
+        <div className="run-actions">
+          <button
+            className="primary"
+            onClick={dispatch}
+            disabled={busy || running || p.city.status !== "ready"}
+            title={p.city.status !== "ready" ? "Wait for the city to finish building" : undefined}
+          >
+            {running ? "Agents are working…" : a ? "Run agents again" : "Dispatch agents"}
+          </button>
+          {running && (
+            <button
+              className="danger"
+              onClick={stop}
+              disabled={stopping}
+              title="Stop after each agent's current turn; findings so far are kept"
+            >
+              {stopping ? "Stopping…" : "Stop"}
+            </button>
+          )}
+        </div>
+        {a?.status === "cancelled" && (
+          <p className="muted small">Stopped on request. The findings below were verified before the stop and are kept.</p>
+        )}
         {a && (
           <div className="stats4">
             <div>

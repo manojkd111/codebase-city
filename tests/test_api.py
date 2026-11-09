@@ -52,6 +52,33 @@ def test_ingest_streams_events_and_serves_city(fixture_repo, tmp_path):
         assert hot[0]["path"] == "pkg/core.py"
 
 
+def test_stop_marks_a_live_run_and_refuses_one_that_ended(tmp_path):
+    from backend.db.models import AnalysisRun, Repo
+    from backend.db.session import make_engine, make_session_factory
+
+    with _client(tmp_path) as c:
+        sessions = make_session_factory(make_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}"))
+        with sessions() as s:
+            repo = Repo(source="https://github.com/a/b", status="ready")
+            s.add(repo)
+            s.flush()
+            live = AnalysisRun(repo_id=repo.id, model="m", status="running")
+            ended = AnalysisRun(repo_id=repo.id, model="m", status="done")
+            s.add_all([live, ended])
+            s.commit()
+            repo_id, live_id, ended_id = repo.id, live.id, ended.id
+
+        r = c.post(f"/api/analyses/{live_id}/stop")
+        assert r.status_code == 202 and r.json()["status"] == "stopping"
+        assert c.post(f"/api/analyses/{live_id}/stop").status_code == 202  # pressing twice is harmless
+        with sessions() as s:
+            assert s.get(AnalysisRun, live_id).status == "stopping"
+        assert c.post(f"/api/analyses/{ended_id}/stop").status_code == 409
+        assert c.post("/api/analyses/9999/stop").status_code == 404
+        # A run that is still stopping blocks a new one, so two can't overlap.
+        assert c.post(f"/api/repos/{repo_id}/analyze").status_code == 409
+
+
 def test_analyze_streams_agents_and_triage_findings(fixture_repo, tmp_path):
     import time
 
