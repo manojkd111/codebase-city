@@ -14,6 +14,11 @@ from . import llm
 from .tools import ROLES
 
 MAX_CANDIDATES = 40
+# Roles whose unused slots are filled with the next riskiest candidates. Debt's brief ("highest
+# complexity and churn") is what the risk score already ranks, so an under-filled pick only loses
+# coverage: benchmark run 7 gave debt 3 of 5 slots and skipped cache.py, missing both bugs in it.
+# Security picks depend on what a file does, not its metrics, so it isn't topped up.
+TOP_UP_ROLES = ("debt",)
 
 
 @dataclass
@@ -124,6 +129,8 @@ def make_plan(
         if picked:
             assignments[role] = picked[:per_role]
             reasons[role] = str(entry.get("reason", ""))[:500]
+            if role in TOP_UP_ROLES and len(picked) < per_role:
+                assignments[role] += [c["path"] for c in cands if c["path"] not in picked][: per_role - len(picked)]
         else:
             assignments[role] = fallback.assignments[role]
             reasons[role] = fallback.reasons[role]

@@ -166,6 +166,15 @@ def test_coordinator_output_is_validated_with_fallback():
     assert sent["fallbacks"] == "default" and sent["thinking"] == {"type": "adaptive"}
 
 
+def test_debt_reviewer_unused_slots_are_filled_with_the_next_hotspots():
+    # Benchmark run 7: debt got 3 of 5 slots, skipped cache.py, and both bugs in it were missed.
+    client = FakeClient({"coordinator": [plan_json(["c.py"], ["c.py"], ["c.py"])]}, agent_route)
+    plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=2)
+    assert plan.assignments["debt"] == ["c.py", "a.py"]  # coordinator's pick first, then by risk
+    assert plan.assignments["security"] == ["c.py"]  # other roles keep exactly what was picked
+    assert not plan.used_fallback
+
+
 def test_coordinator_garbage_falls_back_entirely():
     client = FakeClient({"coordinator": [response(text("not json"))]}, agent_route)
     plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=1)
