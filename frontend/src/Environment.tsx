@@ -1,4 +1,4 @@
-// Ground layer: grass, ring road, streets with lane markings, sidewalks, plazas, gardens, trees, lamps.
+// Ground layer: grass, ring road, streets with lane markings, traffic, sidewalks, plazas, gardens, trees, lamps.
 // Purely decorative and non-interactive (no pointer handlers, so it never blocks building clicks).
 // Everything repeated is one InstancedMesh, so a big city still costs a handful of draw calls.
 
@@ -17,6 +17,7 @@ import {
 } from "./scenery";
 import { districtAccents } from "./districts";
 import type { CityLayout } from "./layout";
+import { Traffic } from "./TrafficLayer";
 
 interface Item {
   x: number;
@@ -205,6 +206,7 @@ export function Environment({ layout }: { layout: CityLayout }) {
         <meshStandardMaterial color="#1a1d23" roughness={0.95} />
       </mesh>
       <Instanced items={scene.dashes} geometry={PLANE} color="#c8b46a" roughness={0.6} receiveShadow={false} />
+      <Traffic layout={layout} />
       <Instanced items={scene.sidewalks} geometry={BOX} color="#3c434d" />
       <Instanced items={scene.curbs} geometry={BOX} color="#545c67" roughness={0.6} />
       <Instanced items={scene.plazas} geometry={BOX} color="#20262e" />
