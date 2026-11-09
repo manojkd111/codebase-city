@@ -15,11 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from backend.agents.runner import ACTIVE, expire_stale_runs
 from backend.config import Settings, get_settings
 from backend.db.models import AnalysisRun, District, EventRow, File, Finding, Fix, ImportEdge, Repo, Road
 from backend.db.session import make_engine, make_session_factory
 from backend.events.bus import EventBus
-from backend.events.schema import EventEnvelope, FindingUpdated
+from backend.events.schema import AnalysisFailed, EventEnvelope, FindingUpdated
 from backend.ingest.runner import RunRecorder
 from backend.ingest.source import parse_github_url
 from backend.jobs import InProcessJobs, Jobs, QueuedJobs
@@ -60,6 +61,7 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
             relay_task = asyncio.create_task(relay_to_bus(Redis.from_url(settings.redis_url), bus))
         else:
             state["jobs"] = InProcessJobs(settings, sessions, publisher, llm_client_factory)
+        expire_stale()  # runs a previous server left behind when it stopped mid-run
         yield
         state["jobs"].cancel_all()
         if relay_task:
@@ -77,6 +79,14 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
 
     def record(repo_id: int, payload) -> None:
         RunRecorder(repo_id, sessions, publisher())(payload)
+
+    def expire_stale(repo_id: int | None = None) -> None:
+        """Fail runs whose process died, so they stop blocking new runs (and the UI recalls their drones)."""
+        with sessions() as s:
+            expired = expire_stale_runs(s, repo_id)
+            s.commit()
+        for rid, run_id, error in expired:
+            record(rid, AnalysisFailed(run_id=run_id, error=error))
 
     @app.get("/api/health")
     def health() -> dict:
@@ -165,15 +175,12 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
     @app.post("/api/repos/{repo_id}/analyze", status_code=202)
     async def analyze(repo_id: int) -> dict:
         """Start a coordinator + specialists pass. One active run per repo."""
+        expire_stale(repo_id)  # a run whose process died must not block this one
         with sessions() as s:
             repo = _get_repo(s, repo_id)
             if repo.status != "ready":
                 raise HTTPException(409, "The city must finish building before agents can inspect it.")
-            active = s.scalar(
-                select(AnalysisRun).where(
-                    AnalysisRun.repo_id == repo_id, AnalysisRun.status.in_(("queued", "running", "stopping"))
-                )
-            )
+            active = s.scalar(select(AnalysisRun).where(AnalysisRun.repo_id == repo_id, AnalysisRun.status.in_(ACTIVE)))
             if active:
                 raise HTTPException(409, f"Analysis run {active.id} is already in progress.")
             run = AnalysisRun(repo_id=repo_id, model=settings.model, status="queued")
@@ -184,14 +191,19 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
         return {"run_id": run_id, "status": "queued", "events": f"/ws/repos/{repo_id}"}
 
     @app.post("/api/analyses/{run_id}/stop", status_code=202)
-    def stop_analysis(run_id: int) -> dict:
+    async def stop_analysis(run_id: int) -> dict:  # async: publishing needs the event loop
         """Ask a run to stop. Each agent finishes the turn it's on (seconds) and stops; findings so far
         are kept. The run reports `analysis.cancelled` on the event stream once it has stopped."""
         with sessions() as s:
             run = s.get(AnalysisRun, run_id)
             if run is None:
                 raise HTTPException(404, "Analysis run not found.")
-            if run.status not in ("queued", "running", "stopping"):
+            repo_id = run.repo_id
+        # Stopping a run whose process already died would wait forever; end it now instead.
+        expire_stale(repo_id)
+        with sessions() as s:
+            run = s.get(AnalysisRun, run_id)
+            if run.status not in ACTIVE:
                 raise HTTPException(409, f"Analysis run {run_id} has already ended ({run.status}).")
             run.status = "stopping"
             s.commit()

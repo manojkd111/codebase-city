@@ -120,7 +120,8 @@ class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
     id: Mapped[int] = mapped_column(primary_key=True)
     repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id", ondelete="CASCADE"), index=True)
-    # queued|running|stopping|done|cancelled|failed; "stopping" is a request the run polls between turns
+    # queued|running|stopping|done|cancelled|failed; "stopping" is a request the run polls between turns.
+    # An active run with no events for a while is failed as interrupted (agents.runner.expire_stale_runs).
     status: Mapped[str] = mapped_column(String(20), default="queued")
     model: Mapped[str] = mapped_column(String(100))
     error: Mapped[str | None] = mapped_column(Text)

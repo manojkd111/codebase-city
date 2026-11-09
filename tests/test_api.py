@@ -79,6 +79,62 @@ def test_stop_marks_a_live_run_and_refuses_one_that_ended(tmp_path):
         assert c.post(f"/api/repos/{repo_id}/analyze").status_code == 409
 
 
+def test_a_run_whose_process_died_is_failed_instead_of_blocking_forever(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from backend.db.models import AnalysisRun, EventRow, Repo
+    from backend.db.session import make_engine, make_session_factory
+
+    long_ago = datetime.now(UTC) - timedelta(minutes=20)
+    with _client(tmp_path) as c:
+        sessions = make_session_factory(make_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}"))
+        with sessions() as s:
+            repo = Repo(source="https://github.com/a/b", status="ready")
+            s.add(repo)
+            s.flush()
+            dead = AnalysisRun(repo_id=repo.id, model="m", status="running", created_at=long_ago)
+            s.add(dead)
+            s.commit()
+            repo_id, dead_id = repo.id, dead.id
+
+        # Pressing Stop on it ends it now rather than leaving it "stopping" forever.
+        r = c.post(f"/api/analyses/{dead_id}/stop")
+        assert r.status_code == 409 and "failed" in r.json()["detail"]
+        with sessions() as s:
+            run = s.get(AnalysisRun, dead_id)
+            last = s.scalars(select(EventRow).where(EventRow.repo_id == repo_id).order_by(EventRow.seq.desc())).first()
+        assert run.status == "failed" and run.error.startswith("Interrupted")
+        assert last.type == "analysis.failed" and last.data["run_id"] == dead_id  # the UI recalls its drones
+
+
+def test_only_silent_runs_count_as_stale(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from backend.agents.runner import STALE_AFTER, expire_stale_runs
+    from backend.db.models import AnalysisRun, EventRow, Repo
+    from backend.db.session import make_engine, make_session_factory
+
+    with _client(tmp_path):  # creates the schema
+        sessions = make_session_factory(make_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}"))
+    with sessions() as s:
+        quiet, busy = Repo(source="q", status="ready"), Repo(source="b", status="ready")
+        s.add_all([quiet, busy])
+        s.flush()
+        silent = AnalysisRun(repo_id=quiet.id, model="m", status="running")
+        working = AnalysisRun(repo_id=busy.id, model="m", status="running")
+        ended = AnalysisRun(repo_id=quiet.id, model="m", status="done")
+        s.add_all([silent, working, ended])
+        s.flush()
+        later = datetime.now(UTC) + STALE_AFTER + timedelta(minutes=1)
+        # The busy repo's run emitted an event a minute ago (relative to `later`).
+        s.add(EventRow(repo_id=busy.id, seq=1, type="agent.turn", data={}, ts=later - timedelta(minutes=1)))
+        expired = expire_stale_runs(s, now=later)
+        assert [run_id for _, run_id, _ in expired] == [silent.id]
+        assert (silent.status, working.status, ended.status) == ("failed", "running", "done")
+
+
 def test_analyze_streams_agents_and_triage_findings(fixture_repo, tmp_path):
     import time
 

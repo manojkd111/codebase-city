@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.config import Settings
-from backend.db.models import AnalysisRun, File, Finding, ImportEdge, Repo
+from backend.db.models import AnalysisRun, EventRow, File, Finding, ImportEdge, Repo
 from backend.events.schema import (
     AgentDispatched,
     AgentFinished,
@@ -65,6 +65,49 @@ def load_repo_facts(s: Session, repo_id: int) -> tuple[list[dict[str, Any]], Gra
         imports[e.src_path].append(e.dst_path)
         imported_by[e.dst_path].append(e.src_path)
     return files, dict(imports), dict(imported_by)
+
+
+ACTIVE = ("queued", "running", "stopping")
+STALE_AFTER = timedelta(minutes=15)
+
+
+def _naive_utc(dt: datetime) -> datetime:
+    # SQLite hands datetimes back without a timezone; compare everything as naive UTC.
+    return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
+
+
+def expire_stale_runs(
+    s: Session, repo_id: int | None = None, now: datetime | None = None
+) -> list[tuple[int, int, str]]:
+    """Fail active runs that have stopped making progress, and return their (repo_id, run_id, error).
+
+    A run whose process died (server restart, crash, killed worker) stays "running" forever and
+    blocks new runs on its repo. A live run emits an event every few seconds, so one that has been
+    silent for STALE_AFTER isn't coming back. Judging by activity rather than by which process owns
+    the run keeps this safe with arq workers and with several API processes sharing one database.
+    The caller commits and publishes the matching AnalysisFailed events.
+    """
+    now = _naive_utc(now or datetime.now(UTC))
+    q = select(AnalysisRun).where(AnalysisRun.status.in_(ACTIVE))
+    if repo_id is not None:
+        q = q.where(AnalysisRun.repo_id == repo_id)
+    expired = []
+    for run in s.scalars(q):
+        started = _naive_utc(run.created_at)
+        last = s.scalar(
+            select(EventRow.ts).where(EventRow.repo_id == run.repo_id).order_by(EventRow.seq.desc()).limit(1)
+        )
+        last_activity = max(started, _naive_utc(last)) if last else started
+        if now - last_activity >= STALE_AFTER:
+            minutes = int(STALE_AFTER.total_seconds() // 60)
+            run.status = "failed"
+            run.error = (
+                f"Interrupted: no progress for {minutes} minutes, so the server or worker running it "
+                "probably stopped. Findings stored before then are kept."
+            )
+            run.finished_at = datetime.now(UTC)
+            expired.append((run.repo_id, run.id, run.error))
+    return expired
 
 
 @contextmanager
