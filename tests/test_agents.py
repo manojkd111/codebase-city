@@ -116,6 +116,26 @@ def test_registry_dedupes_the_same_problem_across_agents(fixture_repo):
     assert not sec.run("submit_finding", {**GOOD, **far, "category": "security", "title": "x"}).is_error
 
 
+def test_a_rerun_is_told_about_earlier_runs_findings(fixture_repo):
+    # Rerunning itsdangerous stored the same problems again: 29 open findings over 3 runs.
+    from backend.agents.tools import FindingRegistry
+
+    def prior(fid, status, start=7, end=9):
+        return {"id": fid, "category": "debt", "file": "pkg/core.py", "line_start": start, "line_end": end} | {
+            "title": f"earlier {fid}",
+            "status": status,
+        }
+
+    registry = FindingRegistry()
+    registry.seed_prior([prior(40, "fixed"), prior(41, "rejected")])
+    tb, stored = _toolbox(fixture_repo, "debt")
+    tb.registry = registry
+    dup = tb.run("submit_finding", GOOD)
+    assert dup.is_error and "#41 from an earlier run (dismissed by a human)" in dup.content
+    assert stored == [] and tb.duplicates == 1  # the fixed #40 is not held against it
+    assert not tb.run("submit_finding", GOOD).is_error and len(stored) == 1  # deliberate resubmission
+
+
 def test_tool_errors_are_returned_not_raised(fixture_repo):
     tb, _ = _toolbox(fixture_repo)
     assert tb.run("read_file", {"path": "../../etc/passwd", "start_line": 1, "end_line": 5}).is_error

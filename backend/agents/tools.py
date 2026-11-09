@@ -121,9 +121,15 @@ OVERLAPPING_ROLES = {"security", "debt"}
 
 
 class PossibleDuplicate(Exception):
-    def __init__(self, existing_id: int, role: str, title: str) -> None:
+    def __init__(self, existing_id: int, source: str, title: str) -> None:
         super().__init__(f"#{existing_id}")
-        self.existing_id, self.role, self.title = existing_id, role, title
+        self.existing_id, self.source, self.title = existing_id, source, title
+
+
+# Earlier runs' findings that a rerun should not repeat. Dismissed ones count: a human already said
+# no. Fixed ones don't: if the problem is still in the code, reporting it again is right.
+PRIOR_STATUSES = ("open", "confirmed", "rejected")
+_PRIOR_LABEL = {"open": "open", "confirmed": "confirmed by a human", "rejected": "dismissed by a human"}
 
 
 class FindingRegistry:
@@ -136,7 +142,20 @@ class FindingRegistry:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._entries: list[tuple[str, str, int, int, int, str]] = []  # category, file, start, end, id, title
+        # category, file, start, end, id, title, source (who reported it, for the agent's message)
+        self._entries: list[tuple[str, str, int, int, int, str, str]] = []
+
+    def seed_prior(self, rows: list[dict[str, Any]]) -> None:
+        """Load earlier runs' findings (dicts with id, category, file, line_start, line_end, title,
+        status), so a rerun is told about them instead of storing the same problem again."""
+        with self._lock:
+            for r in rows:
+                if r["status"] not in PRIOR_STATUSES:
+                    continue
+                source = f"an earlier run ({_PRIOR_LABEL[r['status']]})"
+                self._entries.append(
+                    (r["category"], r["file"], r["line_start"], r["line_end"], r["id"], r["title"], source)
+                )
 
     @staticmethod
     def overlaps(a: tuple[str, str, int, int], b: tuple[str, str, int, int]) -> bool:
@@ -151,11 +170,11 @@ class FindingRegistry:
         key = (f.category, f.file, f.line_start, f.line_end)
         with self._lock:
             if not force:
-                for cat, file, start, end, fid, title in self._entries:
+                for cat, file, start, end, fid, title, source in self._entries:
                     if self.overlaps(key, (cat, file, start, end)):
-                        raise PossibleDuplicate(fid, cat, title)
+                        raise PossibleDuplicate(fid, source, title)
             fid = store(f)
-            self._entries.append((*key, fid, f.title))
+            self._entries.append((*key, fid, f.title, f"the {f.category} reviewer"))
             return fid
 
 
@@ -241,7 +260,7 @@ class ToolBox:
             self._flagged.add(attempt)
             self.duplicates += 1
             return ToolResult(
-                f"Not stored yet: finding #{d.existing_id} from the {d.role} reviewer covers overlapping lines: "
+                f"Not stored yet: finding #{d.existing_id} from {d.source} covers overlapping lines: "
                 f"{d.title!r}. If yours is the same problem, move on. If it is a different problem, submit it "
                 "again unchanged and it will be stored.",
                 is_error=True,

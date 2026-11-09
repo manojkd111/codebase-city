@@ -31,7 +31,7 @@ from backend.ingest.source import checkout, resolve_source
 from . import llm
 from .coordinator import make_plan
 from .specialist import SpecialistResult, run_specialist
-from .tools import ROLES, AcceptedFinding, FindingRegistry, ToolBox
+from .tools import PRIOR_STATUSES, ROLES, AcceptedFinding, FindingRegistry, ToolBox
 from .workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -227,6 +227,21 @@ def execute_analysis(
                 return store
 
             registry = FindingRegistry()  # one per run: agents don't store the same problem twice
+            with sessions() as s:  # ...nor repeat what an earlier run of this repo already reported
+                prior = s.scalars(
+                    select(Finding).where(
+                        Finding.repo_id == repo_id, Finding.run_id != run_id, Finding.status.in_(PRIOR_STATUSES)
+                    )
+                ).all()
+                registry.seed_prior(
+                    [
+                        {
+                            k: getattr(r, k)
+                            for k in ("id", "category", "file", "line_start", "line_end", "title", "status")
+                        }
+                        for r in prior
+                    ]
+                )
             jobs = []
             for role in ROLES:
                 assigned = plan.assignments.get(role, [])
