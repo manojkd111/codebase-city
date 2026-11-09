@@ -56,8 +56,17 @@ def head_sha(path: Path) -> str | None:
 
 
 def _rmtree(path: Path) -> None:
-    # Git marks pack files read-only; on Windows rmtree needs them made writable first.
     def onexc(func, p, _exc):
+        if not os.path.lexists(p):  # already removed below, when rmtree couldn't list it
+            return
+        # A symlink a Linux container created through the Docker mount (the sandbox venv's lib64) is
+        # a reparse point Windows can neither list nor unlink, but rmdir removes it without following.
+        try:
+            os.rmdir(p)
+            return
+        except OSError:
+            pass
+        # Git marks pack files read-only; on Windows rmtree needs them made writable first.
         os.chmod(p, stat.S_IWRITE)
         func(p)
 

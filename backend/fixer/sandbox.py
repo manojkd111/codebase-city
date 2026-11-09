@@ -43,6 +43,28 @@ class SandboxResult:
         return self.exit_code == 0 and not self.timed_out
 
 
+TEST_GROUPS = ("tests", "test", "testing", "dev")
+
+
+def _test_dependency_group(root: Path) -> str | None:
+    """The PEP 735 `[dependency-groups]` entry that holds the test requirements, if any.
+
+    Projects that moved test deps there (itsdangerous keeps freezegun in `tests`) aren't covered by
+    the `.[test]` extras guess. Only a name from TEST_GROUPS is ever returned, so nothing from the
+    untrusted manifest reaches the shell command.
+    """
+    import tomllib
+
+    try:
+        data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    groups = data.get("dependency-groups")
+    if not isinstance(groups, dict):
+        return None
+    return next((g for g in TEST_GROUPS if g in groups), None)
+
+
 def detect_plan(root: Path, python_image: str = "python:3.12-slim") -> TestPlan | None:
     """Pick a test command from the repo's own manifests. None if we can't tell."""
     if (root / "pyproject.toml").exists() or (root / "setup.py").exists() or (root / "requirements.txt").exists():
@@ -51,6 +73,9 @@ def detect_plan(root: Path, python_image: str = "python:3.12-slim") -> TestPlan 
             "(pip install -q -e '.[test]' || pip install -q -e '.[dev]' || pip install -q -e . "
             "|| pip install -q -r requirements.txt || true)"
         )
+        group = _test_dependency_group(root)
+        if group:  # pip >= 25.1 (installed just before) reads ./pyproject.toml's dependency groups
+            install += f" && (pip install -q --group {group} || true)"
         return TestPlan(
             image=python_image,
             setup=f"{venv} && pip install -q --upgrade pip && {install} && pip install -q pytest pytest-cov",

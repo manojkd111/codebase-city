@@ -244,3 +244,32 @@ def test_fix_works_for_a_plain_folder_source(tmp_path):
     patch, changed = _diff(copy)
     assert changed == 1 and "+x = 2" in patch
     assert (src / "pkg" / "a.py").read_text() == "x = 1\n" and not (src / ".git").exists()
+
+
+def test_diff_never_walks_or_ships_sandbox_artefacts(tmp_path):
+    # Live fix #2: git choked on the container venv's Linux symlinks and the fix read as "no changes".
+    from backend.fixer.runner import _diff, _scratch_copy
+
+    src = tmp_path / "plain"
+    src.mkdir()
+    (src / "a.py").write_text("x = 1\n")
+    copy = _scratch_copy(src, tmp_path / "copy", None)
+    (copy / "a.py").write_text("x = 2\n")
+    (copy / ".cbc-venv" / "lib").mkdir(parents=True)
+    (copy / ".cbc-venv" / "lib" / "site.py").write_text("junk\n")
+    (copy / ".cbc-coverage.json").write_text("{}")
+    patch, changed = _diff(copy)
+    assert changed == 1 and ".cbc-" not in patch
+    assert "/.cbc-venv" in (copy / ".git" / "info" / "exclude").read_text()
+
+
+def test_detect_plan_installs_the_pyproject_test_dependency_group(tmp_path):
+    # itsdangerous keeps freezegun in [dependency-groups] tests; without it the suite can't import.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n[dependency-groups]\ndocs = ["sphinx"]\ntests = ["freezegun", "pytest"]\n'
+        '"evil; rm -rf /" = ["x"]\n'
+    )
+    setup = detect_plan(tmp_path).setup
+    assert "pip install -q --group tests" in setup and "evil" not in setup and "docs" not in setup
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    assert "--group" not in detect_plan(tmp_path).setup

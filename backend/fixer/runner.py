@@ -55,10 +55,21 @@ def _scratch_copy(src: Path, dest: Path, sha: str | None) -> Path:
     return dest
 
 
+SANDBOX_ARTEFACTS = (".cbc-venv", ".cbc-gomod", ".cbc-coverage.json", "node_modules")
+
+
 def _diff(root: Path) -> tuple[str, int]:
-    _git(["add", "-A"], cwd=root)
-    # Never ship sandbox artefacts.
-    _git(["reset", "-q", "--", ".cbc-venv", ".cbc-gomod", ".cbc-coverage.json", "node_modules"], cwd=root)
+    # Never ship sandbox artefacts, and never make git walk them: a venv built in the container
+    # holds Linux symlinks that Windows can't read, and `git add -A` used to fail on them, which
+    # read as "the agent made no changes" (live fix #2, itsdangerous).
+    exclude = root / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as fh:
+        fh.write("\n" + "\n".join(f"/{a}" for a in SANDBOX_ARTEFACTS) + "\n")
+    added = _git(["add", "-A"], cwd=root)
+    if added.returncode != 0:
+        raise RuntimeError(f"git add failed while collecting the fix: {added.stderr.strip()[:500]}")
+    _git(["reset", "-q", "--", *SANDBOX_ARTEFACTS], cwd=root)  # in case one was already tracked
     patch = _git(["diff", "--cached", "--binary"], cwd=root).stdout
     names = [n for n in _git(["diff", "--cached", "--name-only"], cwd=root).stdout.splitlines() if n]
     return patch, len(names)
@@ -96,6 +107,7 @@ def execute_fix(
     def progress(step: str, detail: str) -> None:
         emit(FixProgress(fix_id=fix_id, finding_id=finding_id, step=step, detail=detail[:300]))
 
+    outcome = None
     try:
         client = client or llm.make_client()
         if sandbox is None and settings.sandbox_enabled:
@@ -169,6 +181,9 @@ def execute_fix(
         with sessions() as s:
             fix = s.get(Fix, fix_id)
             fix.status, fix.error = "failed", message
+            if outcome is not None:  # a failure after the agent ran still cost tokens
+                fix.input_tokens = outcome.usage.input_tokens
+                fix.output_tokens = outcome.usage.output_tokens
             s.commit()
         emit(FixFailed(fix_id=fix_id, finding_id=finding_id, error=message))
 
