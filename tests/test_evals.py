@@ -40,7 +40,7 @@ def test_a_finding_near_two_problems_does_not_starve_the_other():
 
 def test_known_real_anchors_resolve():
     known = load_planted(key="known_real")
-    assert len(known) == 7 and all(k.line > 0 for k in known)
+    assert len(known) == 11 and all(k.line > 0 for k in known)
 
 
 def test_known_real_counts_for_precision_not_recall_and_never_steals_a_planted_match():

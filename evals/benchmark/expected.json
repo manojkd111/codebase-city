@@ -16,7 +16,7 @@
     {"id": "swallowed", "file": "tests/test_db.py", "anchor": "except Exception:", "categories": ["tests"], "what": "test swallows every exception, cannot fail"},
     {"id": "pricing-untested", "file": "app/pricing.py", "anchor": "def apply_discount(", "span": 24, "categories": ["tests"], "what": "complex discount logic has no tests"}
   ],
-  "known_real_note": "Real problems in the fixture that weren't deliberately planted; the agents found them in the first live run (2026-11-08). They count toward precision (a correct finding isn't noise) but not recall (the agents aren't required to find them). Same matching rules; each is credited to at most one finding, so duplicates still count as noise.",
+  "known_real_note": "Real problems in the fixture that weren't deliberately planted; the agents found them in the first live run (2026-11-08); the four *-untested entries were added 2026-11-09 after every Sonnet run reported them (no test imports those modules). They count toward precision (a correct finding isn't noise) but not recall (the agents aren't required to find them). Same matching rules; each is credited to at most one finding, so duplicates still count as noise.",
   "known_real": [
     {"id": "negative-qty", "file": "app/db.py", "anchor": "for product_id, qty in items:", "categories": ["security", "debt"], "what": "client-supplied negative quantities lower the order total"},
     {"id": "shared-conn", "file": "app/db.py", "anchor": "check_same_thread=False", "categories": ["debt"], "what": "one global SQLite connection shared across threads without locking"},
@@ -24,6 +24,10 @@
     {"id": "shipping-untested", "file": "app/pricing.py", "anchor": "def shipping(total, country):", "span": 8, "categories": ["tests"], "what": "shipping branches have no tests"},
     {"id": "path-traversal", "file": "app/handlers.py", "anchor": "convert uploads/{filename}", "categories": ["security"], "what": "filename can contain ../ (separate from the shell injection on the same line)"},
     {"id": "stored-pre-discount", "file": "app/handlers.py", "anchor": "total = db.add_order(user_id, items)", "categories": ["debt", "security"], "what": "order is stored with the pre-discount total"},
-    {"id": "wrong-discount-args", "file": "app/handlers.py", "anchor": "pricing.apply_discount(total, request.json.get(", "categories": ["debt", "security"], "what": "item_count is the line count, not quantity, and member is never passed"}
+    {"id": "wrong-discount-args", "file": "app/handlers.py", "anchor": "pricing.apply_discount(total, request.json.get(", "categories": ["debt", "security"], "what": "item_count is the line count, not quantity, and member is never passed"},
+    {"id": "auth-untested", "file": "app/auth.py", "anchor": "def sign(user_id, issued_at=None):", "span": 15, "categories": ["tests"], "what": "no test imports auth: signing and verification are untested"},
+    {"id": "handlers-untested", "file": "app/handlers.py", "anchor": "def search(request):", "span": 19, "categories": ["tests"], "what": "no test imports handlers: none of the request handlers are tested"},
+    {"id": "cache-untested", "file": "app/cache.py", "anchor": "def remember(key, value, store={}):", "span": 13, "categories": ["tests"], "what": "no test imports cache: remember, load_snapshot and recent are untested"},
+    {"id": "add-order-untested", "file": "app/db.py", "anchor": "def add_order(user_id, items):", "span": 8, "categories": ["tests"], "what": "test_db never calls add_order: order totals and persistence are untested"}
   ]
 }

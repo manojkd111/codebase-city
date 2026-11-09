@@ -1,8 +1,10 @@
 # Codebase City: rules for working on this repo
 
 Codebase City turns a GitHub repo into a 3D city; Claude agents inspect it and open PRs.
-Build plan: 6 phases over ~8 weeks. Current phase: **all phases built; next is tuning against live runs**
-(run the benchmark with a real API key, then adjust prompts and the risk formula).
+Build plan: 6 phases over ~8 weeks. Current phase: **all phases built; tuning against live runs**.
+Reviews run on Sonnet 5.5 and fixes on Opus 5.5 (ADR 0009). The planted-bug benchmark is saturated
+(13/13 and ~100% precision since run 9), so it now guards against regressions; judge improvements on
+real repos, triaging findings by hand. Next: a harder benchmark fixture, and more real repos.
 
 ## Layout
 - `backend/ingest/`: deterministic analysis (clone, walk, tree-sitter, lizard, git churn, import graph)
