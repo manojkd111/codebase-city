@@ -1,0 +1,42 @@
+{
+  "repo": "planted/ledger",
+  "note": "Harder than shop: 15 modules but each reviewer gets the production 5 files, so the coordinator's choices matter; subtler and cross-file bugs; real tests that pass (some hide a bug); and decoys. Matching is as in expected.json. `also` lists other places the same problem can rightly be cited (cross-file bugs), any of which counts. `decoys` are code that looks dangerous but is fine: a security or debt finding there that matches nothing planted or known is a false alarm, reported separately.",
+  "agent_files": 5,
+  "hotspot_k": 8,
+  "planted": [
+    {"id": "float-cents", "file": "ledger/money.py", "anchor": "return int(amount * 100)", "categories": ["debt"], "what": "float amount truncated to cents: to_cents(0.29) == 28"},
+    {"id": "transfer-race", "file": "ledger/accounts.py", "anchor": "if src.balance < amount:", "span": 3, "categories": ["debt", "security"], "what": "transfer checks then debits without the lock deposit uses; runs concurrently"},
+    {"id": "role-substring", "file": "ledger/auth.py", "anchor": "return role in user.roles", "categories": ["security", "debt"], "what": "substring test on the comma-separated roles string: 'admin' matches 'sysadmin_readonly'"},
+    {"id": "void-idor", "file": "ledger/api.py", "anchor": "def void_invoice(request, invoice_id: int) -> Response:", "span": 7, "categories": ["security"], "what": "void_invoice skips the _owned check every sibling handler does: any user can void any invoice"},
+    {"id": "late-fee-repeat", "file": "ledger/invoices.py", "anchor": "def apply_late_fee(invoice: Invoice, today: date) -> None:", "span": 6, "categories": ["debt"], "what": "late fee added on every nightly run; late_fee_applied is never checked or set",
+     "also": [{"file": "ledger/invoices.py", "anchor": "late_fee_applied: bool = False"}]},
+    {"id": "region-case", "file": "ledger/tax.py", "anchor": "return RATES.get(region, Decimal(\"0\"))", "categories": ["debt", "security"], "what": "RATES keys are lower-case but customer regions are stored upper-case, so every invoice is taxed at 0",
+     "also": [
+       {"file": "ledger/invoices.py", "anchor": "total = net + tax.tax_cents(net, customer.region)"},
+       {"file": "ledger/customers.py", "anchor": "return region.strip().upper()"}
+     ]},
+    {"id": "webhook-replay", "file": "ledger/webhooks.py", "anchor": "expected = hmac.new(secret, body, hashlib.sha256).hexdigest()", "categories": ["security"], "what": "the timestamp is checked but not signed, so an old delivery replays with a fresh X-Timestamp"},
+    {"id": "csv-injection", "file": "ledger/export.py", "anchor": "w.writerow([r[\"number\"], r[\"customer_name\"], from_cents(r[\"total_cents\"])])", "categories": ["security"], "what": "customer-controlled names written raw to a CSV opened in Excel (formula injection)"},
+    {"id": "page-offset", "file": "ledger/pagination.py", "anchor": "start = page * size", "categories": ["debt"], "what": "pages are documented as 1-based but used 0-based: page 1 skips the first page",
+     "also": [{"file": "ledger/api.py", "anchor": "page = int(request.args.get(\"page\", 1))"}]},
+    {"id": "retry-swallow", "file": "ledger/retry.py", "anchor": "log.warning(\"giving up after %d attempts\", attempts)", "span": 1, "categories": ["debt"], "what": "returns None after the last failure though documented to re-raise"},
+    {"id": "weak-token", "file": "ledger/tokens.py", "anchor": "return \"\".join(random.choices(ALPHABET, k=length))", "categories": ["security"], "what": "payment-link token from the non-cryptographic random module"},
+    {"id": "refunds-untested", "file": "ledger/refunds.py", "anchor": "def calculate_refund(", "span": 33, "categories": ["tests"], "what": "refund calculation (windows, chargebacks, split across payments) has no tests"},
+    {"id": "always-true-assert", "file": "tests/test_api.py", "anchor": "assert resp.status == 200 or 404", "categories": ["tests"], "what": "`x == 200 or 404` is always true"},
+    {"id": "mock-only-test", "file": "tests/test_invoices.py", "anchor": "def test_build_adds_tax():", "span": 4, "categories": ["tests"], "what": "patches tax_cents and asserts only that the mock was called; the total is never checked"}
+  ],
+  "known_real_note": "Real problems found by the first ledger runs (2026-11-09) that weren't planted; each was checked against the code.",
+  "known_real": [
+    {"id": "from-row-drops-fields", "file": "ledger/invoices.py", "anchor": "def from_row(cls, row) -> \"Invoice\":", "span": 9, "categories": ["debt", "security"], "what": "from_row drops paid_on, late_fee_applied and lines, so a reloaded invoice always fails the refund window"},
+    {"id": "retry-untested", "file": "ledger/retry.py", "anchor": "def retry(attempts: int = 3", "span": 20, "categories": ["tests"], "what": "no test imports retry"},
+    {"id": "refund-status-untested", "file": "ledger/refunds.py", "anchor": "def new_status(invoice, plan, payments: list[Payment]) -> str:", "span": 3, "categories": ["tests"], "what": "new_status is untested"},
+    {"id": "db-untested", "file": "ledger/db.py", "anchor": "def list_invoices(customer_id: int", "span": 6, "categories": ["tests"], "what": "db is only ever mocked in tests"},
+    {"id": "export-untested", "file": "ledger/export.py", "anchor": "def invoices_csv(rows) -> str:", "span": 8, "categories": ["tests"], "what": "no test imports export"}
+  ],
+  "decoys": [
+    {"id": "orderby-whitelist", "categories": ["security", "debt"], "file": "ledger/db.py", "anchor": "sql = f\"SELECT * FROM invoices WHERE customer_id = ? ORDER BY {sort} {direction}\"", "what": "f-string SQL, but sort is checked against ALLOWED_SORT and direction is one of two literals"},
+    {"id": "md5-etag", "categories": ["security", "debt"], "file": "ledger/api.py", "anchor": "etag = hashlib.md5(body.encode(), usedforsecurity=False).hexdigest()", "what": "MD5 as an ETag cache validator, not for security"},
+    {"id": "subprocess-list", "categories": ["security", "debt"], "file": "ledger/export.py", "anchor": "subprocess.run([\"wkhtmltopdf\", \"--quiet\", src, out_path], check=True, timeout=60)", "what": "argument list, no shell, fixed program"},
+    {"id": "literal-eval", "categories": ["security", "debt"], "file": "ledger/config.py", "anchor": "settings[key.strip()] = ast.literal_eval(raw.strip())", "what": "ast.literal_eval only evaluates literals"}
+  ]
+}

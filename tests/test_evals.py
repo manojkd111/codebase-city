@@ -38,6 +38,35 @@ def test_a_finding_near_two_problems_does_not_starve_the_other():
     assert s.unmatched == []
 
 
+def test_ledger_fixture_resolves_and_scores_alternates_and_decoys():
+    from evals.benchmark.score import FIXTURES
+
+    exp = FIXTURES["ledger"]
+    planted, decoys = load_planted(exp), load_planted(exp, key="decoys")
+    assert len(planted) == 14 and len(decoys) == 4
+    region = next(p for p in planted if p.id == "region-case")
+    assert {f for f, _, _ in region.locations()} == {"ledger/tax.py", "ledger/invoices.py", "ledger/customers.py"}
+    store = next(line for f, line, _ in region.alts if f == "ledger/customers.py")
+    orderby = next(d for d in decoys if d.id == "orderby-whitelist")
+    findings = [
+        # The cross-file bug cited at the other end (where regions are upper-cased) still counts.
+        {"file": "ledger/customers.py", "category": "debt", "line_start": store, "line_end": store},
+        # A decoy hit is reported, in any category.
+        {"file": "ledger/db.py", "category": "security", "line_start": orderby.line, "line_end": orderby.line},
+    ]
+    s = score(findings, planted, [], decoys)
+    assert s.matched == {"region-case": 0} and s.decoy_hits == {"orderby-whitelist": [1]}
+    assert s.unmatched == [1]  # still noise for precision
+
+
+def test_hotspot_recall_counts_out_of_what_fits_in_k():
+    from evals.benchmark.score import Planted
+
+    planted = [Planted(str(i), f"m{i}.py", 1, ["debt"], "") for i in range(4)]
+    files = [{"path": f"m{i}.py", "risk": 10 - i, "is_test": False} for i in range(4)]
+    assert hotspot_recall(files, planted, 2) == 1.0  # 4 buggy files, the top 2 are both buggy
+
+
 def test_known_real_anchors_resolve():
     known = load_planted(key="known_real")
     assert len(known) == 11 and all(k.line > 0 for k in known)
@@ -71,8 +100,9 @@ def test_hotspot_recall():
         {"path": "app/x.py", "risk": 8, "is_test": False},
         {"path": "tests/test_db.py", "risk": 99, "is_test": True},
     ]
-    targets = {p.file for p in planted if not p.file.startswith("tests/")}
-    assert hotspot_recall(files, planted, 1) == 1 / len(targets)
+    # Test files never take a slot; out of what fits in k: the top 1 is buggy, the top 2 half.
+    assert hotspot_recall(files, planted, 1) == 1.0
+    assert hotspot_recall(files, planted, 2) == 0.5
 
 
 def test_benchmark_metrics_only_runs_end_to_end(capsys):

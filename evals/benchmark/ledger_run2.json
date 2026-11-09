@@ -1,0 +1,177 @@
+{
+  "fixture": "ledger",
+  "hotspot_k": 8,
+  "hotspot_recall": 0.875,
+  "recall": 0.6428571428571429,
+  "precision_floor": 0.6923076923076923,
+  "matched": {
+    "float-cents": 5,
+    "role-substring": 1,
+    "void-idor": 0,
+    "late-fee-repeat": 7,
+    "webhook-replay": 2,
+    "retry-swallow": 4,
+    "weak-token": 3,
+    "refunds-untested": 8,
+    "always-true-assert": 10
+  },
+  "known_real": {},
+  "missed": [
+    "transfer-race",
+    "region-case",
+    "csv-injection",
+    "page-offset",
+    "mock-only-test"
+  ],
+  "decoy_hits": {
+    "orderby-whitelist": [
+      11
+    ]
+  },
+  "findings": [
+    {
+      "file": "ledger/api.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 48,
+      "line_end": 52,
+      "title": "void_invoice lacks ownership check (IDOR)"
+    },
+    {
+      "file": "ledger/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "Role check uses substring match on comma-separated string"
+    },
+    {
+      "file": "ledger/webhooks.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 19,
+      "line_end": 22,
+      "title": "Webhook timestamp not covered by signature, so replay protection is ineffective"
+    },
+    {
+      "file": "ledger/tokens.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 9,
+      "title": "Payment link token generated with non-cryptographic PRNG"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 18,
+      "line_end": 20,
+      "title": "retry swallows final failure and returns None instead of re-raising"
+    },
+    {
+      "file": "ledger/money.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 6,
+      "line_end": 8,
+      "title": "to_cents truncates float product, producing off-by-one-cent amounts"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 41,
+      "line_end": 48,
+      "title": "from_row drops paid_on and late_fee_applied, breaking refunds for loaded invoices"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 59,
+      "line_end": 62,
+      "title": "Late fee is re-applied on every nightly run because late_fee_applied is never used"
+    },
+    {
+      "file": "ledger/refunds.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 27,
+      "line_end": 49,
+      "title": "Refund calculation (status check, amount bounds, windows, newest-first split) has no tests"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 11,
+      "line_end": 23,
+      "title": "retry decorator behaviour (attempt count, backoff, exception filtering, final failure) is untested"
+    },
+    {
+      "file": "tests/test_api.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 25,
+      "line_end": 28,
+      "title": "test_list_invoices assertion is always true"
+    },
+    {
+      "file": "ledger/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 18,
+      "line_end": 23,
+      "title": "list_invoices sort allow-list and query behaviour have no test (api tests mock it out)"
+    },
+    {
+      "file": "ledger/export.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 10,
+      "line_end": 17,
+      "title": "CSV export for accounting has no tests"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "ledger/api.py",
+        "ledger/db.py",
+        "ledger/auth.py",
+        "ledger/webhooks.py",
+        "ledger/tokens.py"
+      ],
+      "reason": "Request handling, SQL helpers, authentication, webhook intake and token handling are the most likely places for untrusted input to cause vulnerabilities."
+    },
+    "tests": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/db.py",
+        "ledger/retry.py",
+        "ledger/money.py",
+        "ledger/export.py",
+        "tests/test_money.py",
+        "tests/test_api.py",
+        "tests/conftest.py"
+      ],
+      "reason": "These modules have non-trivial logic or data handling but few or no importing tests, so important behaviour like refund branches, retries and money rounding is likely uncovered."
+    },
+    "debt": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/invoices.py",
+        "ledger/money.py",
+        "ledger/retry.py",
+        "ledger/config.py"
+      ],
+      "reason": "Highest complexity concentrations (refunds ccn_max 13, retry, money, config) and widely imported invoice logic are the most likely to contain bugs and defect-prone branching."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 97256,
+  "output_tokens": 11176,
+  "cache_read_tokens": 73088,
+  "cost_usd": 0.1868
+}
