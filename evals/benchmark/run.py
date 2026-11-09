@@ -80,7 +80,7 @@ def _bench(args, settings, sessions, fixture, planted) -> int:
         return 0
 
     with sessions() as s:
-        run = AnalysisRun(repo_id=repo_id, model=settings.model)
+        run = AnalysisRun(repo_id=repo_id, model=settings.review_model)
         s.add(run)
         s.commit()
         run_id = run.id

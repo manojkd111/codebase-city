@@ -14,8 +14,11 @@ class Settings:
     allow_local_sources: bool
     workdir: str | None
     max_concurrent_ingests: int
-    # Agents (Week 3)
+    # Agents (Week 3). `model` writes fixes; `review_model` runs the coordinator and specialists.
+    # A wrong finding is caught at triage, a bad fix lands in a PR, so only fixes get Opus by default
+    # (benchmark run 10: Sonnet 5.5 reviewers 13/13 at $0.18 vs Opus 5.5 13/13 at $0.42).
     model: str = "claude-opus-5-5"
+    review_model: str = "claude-sonnet-5-5"
     effort: str = "high"
     coordinator_effort: str = "low"
     agent_files: int = 5  # files each specialist is assigned
@@ -41,6 +44,7 @@ def get_settings() -> Settings:
         workdir=os.getenv("CBC_WORKDIR"),
         max_concurrent_ingests=int(os.getenv("CBC_MAX_CONCURRENT_INGESTS", "2")),
         model=os.getenv("CBC_MODEL", "claude-opus-5-5"),
+        review_model=os.getenv("CBC_REVIEW_MODEL", "claude-sonnet-5-5"),
         effort=os.getenv("CBC_EFFORT", "high"),
         coordinator_effort=os.getenv("CBC_COORDINATOR_EFFORT", "low"),
         agent_files=int(os.getenv("CBC_AGENT_FILES", "5")),

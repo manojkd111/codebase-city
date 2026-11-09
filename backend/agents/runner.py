@@ -164,7 +164,7 @@ def execute_analysis(
                 input_tokens=total.input_tokens,
                 output_tokens=total.output_tokens,
                 cache_read_tokens=total.cache_read,
-                cost_usd=total.cost_usd(settings.model),
+                cost_usd=total.cost_usd(settings.review_model),
             )
         )
         return results
@@ -172,13 +172,13 @@ def execute_analysis(
     if stopped_while_queued:
         return finish([], llm.Usage(), cancelled=True)
 
-    emit(AnalysisStarted(run_id=run_id, model=settings.model))
+    emit(AnalysisStarted(run_id=run_id, model=settings.review_model))
     results: list[SpecialistResult] = []
     try:
         client = client or llm.make_client()
         plan = make_plan(
             client,
-            model=settings.model,
+            model=settings.review_model,
             effort=settings.coordinator_effort,
             repo_name=name,
             files=files,
@@ -247,7 +247,7 @@ def execute_analysis(
                 agent_id, role, assigned, toolbox = job
                 r = run_specialist(
                     client,
-                    model=settings.model,
+                    model=settings.review_model,
                     effort=settings.effort,
                     max_turns=settings.agent_max_turns,
                     run_id=run_id,
@@ -271,7 +271,7 @@ def execute_analysis(
                         output_tokens=r.usage.output_tokens,
                         error=r.error,
                         cache_read_tokens=r.usage.cache_read,
-                        cost_usd=r.usage.cost_usd(settings.model),
+                        cost_usd=r.usage.cost_usd(settings.review_model),
                         stopped=r.stopped,
                     )
                 )

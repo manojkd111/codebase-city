@@ -183,7 +183,7 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
             active = s.scalar(select(AnalysisRun).where(AnalysisRun.repo_id == repo_id, AnalysisRun.status.in_(ACTIVE)))
             if active:
                 raise HTTPException(409, f"Analysis run {active.id} is already in progress.")
-            run = AnalysisRun(repo_id=repo_id, model=settings.model, status="queued")
+            run = AnalysisRun(repo_id=repo_id, model=settings.review_model, status="queued")
             s.add(run)
             s.commit()
             run_id = run.id
@@ -329,6 +329,7 @@ def create_app(settings: Settings | None = None, *, llm_client_factory: Callable
 
         return {
             "model": settings.model,
+            "review_model": settings.review_model,
             "llm_credentials": bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
             or llm_client_factory is not None,
             "pull_requests": bool(settings.github_token),

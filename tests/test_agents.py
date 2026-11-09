@@ -190,6 +190,8 @@ def _setup(tmp_path, fixture_repo):
         database_url=f"sqlite:///{(tmp_path / 'a.db').as_posix()}",
         allow_local_sources=True,
         agent_max_turns=6,
+        model="claude-opus-5-5",
+        review_model="claude-sonnet-5-5",  # pinned so a CBC_* env var can't change the costs below
     )
     sessions = make_session_factory(make_engine(settings.database_url))
     with sessions() as s:
@@ -199,7 +201,7 @@ def _setup(tmp_path, fixture_repo):
         repo_id = repo.id
     execute_ingest(repo_id, settings, sessions, allow_local=True, raise_errors=True)
     with sessions() as s:
-        run = AnalysisRun(repo_id=repo_id, model=settings.model)
+        run = AnalysisRun(repo_id=repo_id, model=settings.review_model)
         s.add(run)
         s.commit()
         run_id = run.id
@@ -260,8 +262,10 @@ def test_full_analysis_run_streams_drone_events_and_stores_verified_findings(tmp
     debt_turns = [t for t in turns if t["agent_id"].startswith("debt")]
     assert [t["turn"] for t in debt_turns] == [1, 2, 3]
     assert debt_turns[-1]["input_tokens"] > debt_turns[0]["input_tokens"]  # cumulative
-    # Billed cost travels with the events (fake usage: 100 uncached in / 20 out per turn, Opus 5.5 prices).
-    assert debt_turns[-1]["cost_usd"] == pytest.approx(3 * (100 * 4 + 20 * 20) / 1e6)
+    # Billed cost travels with the events (fake usage: 100 uncached in / 20 out per turn). Reviews run
+    # and bill on the review model (Sonnet 5.5: $2 in / $10 out), never the fixer's Opus.
+    assert debt_turns[-1]["cost_usd"] == pytest.approx(3 * (100 * 2 + 20 * 10) / 1e6)
+    assert {c["model"] for c in client.calls} == {"claude-sonnet-5-5"}
     assert analysis[-1] == "analysis.completed"
     assert seqs == list(range(1, len(seqs) + 1))  # one gap-free stream across ingest + parallel agents
 
