@@ -23,6 +23,21 @@ def test_scoring_is_one_to_one_and_category_aware():
     assert s.recall == 1 / 13 and s.precision_floor == 1 / 4
 
 
+def test_a_finding_near_two_problems_does_not_starve_the_other():
+    # Live run 6: the "swallowed" finding (lines 8-12) is within SLACK of no-assert (line 5) and came
+    # first, so greedy matching gave it to no-assert and the real no-assert finding (4-5) to nothing.
+    planted = load_planted()
+    na = next(p for p in planted if p.id == "no-assert")
+    sw = next(p for p in planted if p.id == "swallowed")
+    findings = [
+        {"file": sw.file, "category": "tests", "line_start": sw.line - 3, "line_end": sw.line + 1},
+        {"file": na.file, "category": "tests", "line_start": na.line - 1, "line_end": na.line},
+    ]
+    s = score(findings, planted)
+    assert s.matched == {"no-assert": 1, "swallowed": 0}
+    assert s.unmatched == []
+
+
 def test_known_real_anchors_resolve():
     known = load_planted(key="known_real")
     assert len(known) == 7 and all(k.line > 0 for k in known)

@@ -57,34 +57,54 @@ def load_planted(
     return out
 
 
-def _match(findings: list[dict[str, Any]], p: Planted, used: set[int]) -> int | None:
+def _candidates(findings: list[dict[str, Any]], p: Planted, taken: set[int]) -> list[int]:
+    out = []
     for i, f in enumerate(findings):
-        if i in used or f["file"] != p.file or f["category"] not in p.categories:
+        if i in taken or f["file"] != p.file or f["category"] not in p.categories:
             continue
         # Overlap between the finding (± SLACK) and the problem's lines.
         if f["line_start"] - SLACK <= p.line + p.span and p.line <= f["line_end"] + SLACK:
-            used.add(i)
-            return i
-    return None
+            out.append(i)
+    return out
+
+
+def _max_match(findings: list[dict[str, Any]], problems: list[Planted], taken: set[int]) -> dict[str, int]:
+    """Maximum one-to-one matching (augmenting paths), so one finding near two problems can't
+    starve the other: e.g. a finding spanning lines 8-12 is within SLACK of a problem on line 5
+    and one on line 11, while a second finding only reaches line 5. Greedy matching would give
+    the first finding to line 5 and miss line 11."""
+    cands = {p.id: _candidates(findings, p, taken) for p in problems}
+    owner: dict[int, str] = {}  # finding index -> problem id
+
+    def augment(pid: str, seen: set[int]) -> bool:
+        for i in cands[pid]:
+            if i in seen:
+                continue
+            seen.add(i)
+            if i not in owner or augment(owner[i], seen):
+                owner[i] = pid
+                return True
+        return False
+
+    for p in problems:
+        augment(p.id, set())
+    return {pid: i for i, pid in owner.items()}
 
 
 def score(findings: list[dict[str, Any]], planted: list[Planted], known: list[Planted] = ()) -> Score:
-    """Greedy one-to-one matching: each problem is credited to at most one finding.
+    """One-to-one matching: each problem is credited to at most one finding, and as many problems
+    as possible are credited.
 
     Planted problems are matched first, so a known-real problem can never take a finding from one.
     """
     s = Score(total_planted=len(planted), total_findings=len(findings))
-    used: set[int] = set()
-    for p in planted:
-        i = _match(findings, p, used)
-        if i is None:
-            s.missed.append(p.id)
-        else:
-            s.matched[p.id] = i
-    for k in known:
-        i = _match(findings, k, used)
-        if i is not None:
-            s.known[k.id] = i
+    matched = _max_match(findings, planted, set())
+    s.matched = {p.id: matched[p.id] for p in planted if p.id in matched}
+    s.missed = [p.id for p in planted if p.id not in matched]
+    used = set(matched.values())
+    found = _max_match(findings, list(known), used)
+    s.known = {k.id: found[k.id] for k in known if k.id in found}
+    used |= set(found.values())
     s.unmatched = [i for i in range(len(findings)) if i not in used]
     return s
 
