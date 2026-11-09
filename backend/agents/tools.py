@@ -197,6 +197,13 @@ class FindingRegistry:
             return fid
 
 
+def _joins_two(title: str, category: str) -> bool:
+    """A title that may hold two problems. ';' always; ' and ' only for bugs, where shop run 15 merged
+    "expiry never enforced and signature compared non-constant-time". Test-gap titles name several
+    untested things with 'and' as a matter of course, so asking there would only cost turns."""
+    return ";" in title or (category in ("security", "debt") and " and " in title.lower())
+
+
 @dataclass
 class ToolBox:
     """Executes tool calls for one agent. `on_finding` stores an accepted finding and returns its id."""
@@ -274,7 +281,7 @@ class ToolBox:
             needs_human_review=conf < 0.6 or f["severity"] == "critical",
         )
         attempt = (rel, finding.line_start, finding.line_end, finding.title.lower())
-        if ";" in finding.title and attempt not in self._split_asked:
+        if _joins_two(finding.title, finding.category) and attempt not in self._split_asked:
             # Benchmark runs 9 and 11: Sonnet joined two planted bugs in one title ("expiry never
             # enforced; signature compared non-constant-time"), and whoever fixes the first never sees
             # the second. Asked once; a resubmission is the agent saying it is one problem.

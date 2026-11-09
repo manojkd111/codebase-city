@@ -1,0 +1,206 @@
+{
+  "fixture": "shop",
+  "hotspot_k": 5,
+  "hotspot_recall": 1.0,
+  "recall": 0.9230769230769231,
+  "precision_floor": 1.0,
+  "matched": {
+    "sqli": 2,
+    "hardcoded-secret": 3,
+    "timing-compare": 4,
+    "shell-injection": 0,
+    "pickle": 1,
+    "unauth-checkout": 5,
+    "missing-product": 8,
+    "mutable-default": 6,
+    "file-leak": 7,
+    "no-assert": 9,
+    "swallowed": 10,
+    "pricing-untested": 11
+  },
+  "known_real": {
+    "stored-pre-discount": 16,
+    "wrong-discount-args": 15,
+    "auth-untested": 12,
+    "handlers-untested": 13,
+    "cache-untested": 14
+  },
+  "missed": [
+    "no-expiry"
+  ],
+  "decoy_hits": {},
+  "findings": [
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 13,
+      "line_end": 13,
+      "title": "Shell command injection via filename in make_thumbnail"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 15,
+      "line_end": 15,
+      "title": "SQL injection in find_products"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded token signing key in source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 21,
+      "line_end": 23,
+      "title": "Token expiry never enforced and signature compared non-constant-time"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "checkout does not reject failed authentication"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes cache store shared across all callers"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 11,
+      "line_end": 13,
+      "title": "File handle never closed in load_snapshot"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 26,
+      "line_end": 31,
+      "title": "add_order crashes on unknown product and has no rollback or validation"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing swallows every exception and can never fail"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "Discount and shipping logic has no tests"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 24,
+      "title": "Token signing and verification have no tests (round trip, tampering, malformed input, expiry)"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "checkout handler flow (auth, order, discount) is untested"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 16,
+      "line_end": 18,
+      "title": "Cache expiry filter (recent) and remember have no tests"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 25,
+      "line_end": 26,
+      "title": "Checkout persists the undiscounted total but returns a different discounted total"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 26,
+      "line_end": 26,
+      "title": "Checkout never passes the member flag, so member pricing in apply_discount is unreachable"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/handlers.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "handlers take untrusted requests, auth handles credentials/tokens, db likely builds SQL, cache may deserialize or key on user-controlled data"
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "tests/test_db.py"
+      ],
+      "reason": "pricing is the most complex with no test importers; auth, handlers and cache have no importing tests"
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/db.py",
+        "app/cache.py",
+        "app/auth.py",
+        "app/handlers.py"
+      ],
+      "reason": "pricing has the highest complexity (ccn_max 12) so is most prone to bugs; db and cache are shared helpers where defects spread"
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 80614,
+  "output_tokens": 12927,
+  "cache_read_tokens": 53967,
+  "cost_usd": 0.2067
+}

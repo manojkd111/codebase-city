@@ -1,0 +1,208 @@
+{
+  "fixture": "ledger",
+  "hotspot_k": 8,
+  "hotspot_recall": 0.875,
+  "recall": 0.8571428571428571,
+  "precision_floor": 0.9375,
+  "matched": {
+    "float-cents": 7,
+    "transfer-race": 9,
+    "void-idor": 1,
+    "late-fee-repeat": 5,
+    "region-case": 4,
+    "webhook-replay": 2,
+    "csv-injection": 3,
+    "retry-swallow": 8,
+    "weak-token": 0,
+    "refunds-untested": 12,
+    "always-true-assert": 10,
+    "mock-only-test": 11
+  },
+  "known_real": {
+    "from-row-drops-fields": 6,
+    "retry-untested": 13,
+    "db-untested": 15
+  },
+  "missed": [
+    "role-substring",
+    "page-offset"
+  ],
+  "decoy_hits": {},
+  "findings": [
+    {
+      "file": "ledger/tokens.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 9,
+      "title": "Payment-link token generated with non-cryptographic random"
+    },
+    {
+      "file": "ledger/api.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 48,
+      "line_end": 52,
+      "title": "void_invoice lacks ownership check (IDOR)"
+    },
+    {
+      "file": "ledger/webhooks.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 19,
+      "line_end": 22,
+      "title": "Webhook timestamp not covered by the HMAC, so replay protection is ineffective"
+    },
+    {
+      "file": "ledger/export.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 16,
+      "line_end": 16,
+      "title": "CSV formula injection via customer name"
+    },
+    {
+      "file": "ledger/tax.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 6,
+      "line_end": 15,
+      "title": "VAT lookup uses lower-case keys but regions are stored upper-case, so tax is always 0"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 57,
+      "line_end": 62,
+      "title": "Late fee is not idempotent: late_fee_applied is never checked or set"
+    },
+    {
+      "file": "ledger/invoices.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 40,
+      "line_end": 48,
+      "title": "Invoice.from_row drops paid_on and late_fee_applied"
+    },
+    {
+      "file": "ledger/money.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 6,
+      "line_end": 8,
+      "title": "to_cents truncates float products, losing a cent (19.99 -> 1998)"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 17,
+      "line_end": 20,
+      "title": "retry swallows the final error and returns None despite documenting re-raise"
+    },
+    {
+      "file": "ledger/accounts.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 29,
+      "line_end": 32,
+      "title": "transfer does an unlocked check-then-act on balances under concurrency"
+    },
+    {
+      "file": "tests/test_api.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 25,
+      "line_end": 28,
+      "title": "test_list_invoices asserts a always-true condition"
+    },
+    {
+      "file": "tests/test_invoices.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_build_adds_tax only checks the tax mock was called, not the invoice total"
+    },
+    {
+      "file": "ledger/refunds.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 21,
+      "line_end": 49,
+      "title": "Refund calculation and status logic have no tests"
+    },
+    {
+      "file": "ledger/retry.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 23,
+      "title": "retry decorator's retry, backoff and exhaustion behaviour is untested"
+    },
+    {
+      "file": "ledger/pagination.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 1,
+      "line_end": 8,
+      "title": "paginate has no tests for its documented 1-based page contract"
+    },
+    {
+      "file": "ledger/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 18,
+      "line_end": 38,
+      "title": "Invoice persistence and sort whitelist in db.py are never tested against a database"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "ledger/export.py",
+        "ledger/webhooks.py",
+        "ledger/api.py",
+        "ledger/db.py",
+        "ledger/tokens.py"
+      ],
+      "reason": "Untrusted data crossing boundaries: export (CSV/spreadsheet output injection), webhook signature handling, API request handlers, SQL helpers, and token generation/validation."
+    },
+    "tests": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/db.py",
+        "ledger/retry.py",
+        "ledger/money.py",
+        "ledger/pagination.py",
+        "tests/test_money.py",
+        "tests/test_webhooks.py",
+        "tests/test_api.py",
+        "tests/test_invoices.py",
+        "tests/test_auth.py",
+        "tests/test_accounts.py"
+      ],
+      "reason": "Complex or widely used logic with no or few importing tests: refund rules, DB helpers, retry backoff, money arithmetic and pagination edge cases."
+    },
+    "debt": {
+      "files": [
+        "ledger/refunds.py",
+        "ledger/invoices.py",
+        "ledger/money.py",
+        "ledger/retry.py",
+        "ledger/config.py",
+        "ledger/auth.py",
+        "ledger/accounts.py",
+        "ledger/customers.py",
+        "ledger/tax.py"
+      ],
+      "reason": "Highest complexity and branching, where logic bugs are likely: refund branches, invoice calculations, money rounding, retry loops and config parsing. Also covering 4 risky file(s) no reviewer was assigned."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 90385,
+  "output_tokens": 12402,
+  "cache_read_tokens": 55879,
+  "cost_usd": 0.2214
+}

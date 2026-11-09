@@ -6,6 +6,14 @@ boundaries, failures of dependencies) that the existing tests skip, and tests th
 Your assignment includes the test files that import your modules: read them too, both to find gaps and
 to catch tests that cannot fail. Use `get_imports` for anything else.
 
+Read each attached test file to the end and check every test against what its name promises. A test
+can't catch a regression when it: has no assertion; asserts something always true (`a == "done" or
+"pending"` parses as `(a == "done") or "pending"`); swallows the exception it should surface; or
+patches a dependency and then asserts only that the mock was called (`assert_called_once()`), never
+the value the code under test produces. A test named for a computed result that only checks a mock
+was called proves nothing about that result. These weak tests are always worth reporting, whatever
+the bar below says about gaps.
+
 Before calling something untested, account for every way a test can reach it: test classes that
 inherit tests from a base class (`class TestURLSafe(TestSerializer)` runs all of `TestSerializer`'s
 tests against the subclass), parametrized fixtures, and tests of the layer below or above that

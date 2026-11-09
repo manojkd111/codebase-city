@@ -188,6 +188,21 @@ def test_a_rerun_is_told_about_earlier_runs_findings(fixture_repo):
     assert not tb.run("submit_finding", GOOD).is_error and len(stored) == 1  # deliberate resubmission
 
 
+def test_and_in_a_bug_title_asks_to_split_but_not_in_a_test_gap_title(fixture_repo):
+    # Shop run 15: "Token expiry never enforced and signature compared non-constant-time".
+    from backend.agents.tools import FindingRegistry
+
+    debt, debt_stored = _toolbox(fixture_repo, "debt")
+    debt.registry = FindingRegistry()
+    merged = {**GOOD, "title": "Loop returns early and the fallback returns a str"}
+    assert debt.run("submit_finding", merged).is_error and debt_stored == []
+    assert not debt.run("submit_finding", merged).is_error and len(debt_stored) == 1
+    tests, tests_stored = _toolbox(fixture_repo, "tests")
+    tests.registry = FindingRegistry()
+    gap = {**GOOD, "category": "tests", "title": "Signing and verification have no tests"}
+    assert not tests.run("submit_finding", gap).is_error and len(tests_stored) == 1
+
+
 def test_tool_errors_are_returned_not_raised(fixture_repo):
     tb, _ = _toolbox(fixture_repo)
     assert tb.run("read_file", {"path": "../../etc/passwd", "start_line": 1, "end_line": 5}).is_error
@@ -254,7 +269,23 @@ def test_files_no_reviewer_got_go_to_debt_but_picks_are_kept():
     plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by={}, per_role=1)
     assert plan.assignments["security"] == ["a.py"] and plan.assignments["tests"] == ["a.py"]
     assert plan.assignments["debt"] == ["a.py", "b.py"]  # b first by risk; c waits (cap: per_role extra)
-    assert "no reviewer was assigned" in plan.reasons["debt"]
+    assert "no bug reviewer was assigned" in plan.reasons["debt"]
+
+
+def test_security_gets_extra_slots_and_a_tests_only_file_still_needs_a_bug_reviewer():
+    # Ledger runs 5-6: more input-handling files than slots pushed auth.py or tokens.py out of security;
+    # and pagination.py, given only to the tests reviewer, had its bug reported as a test gap.
+    from backend.agents.coordinator import SECURITY_EXTRA
+
+    files = [{**FILES[0], "path": f"m{i}.py", "risk": 10 - i} for i in range(6)]
+    picks = [f"m{i}.py" for i in range(6)]
+    client = FakeClient({"coordinator": [plan_json(picks, ["m3.py"], ["m0.py"])]}, agent_route)
+    plan = make_plan(client, model="m", effort="low", repo_name="r", files=files, imported_by={}, per_role=1)
+    assert plan.assignments["security"] == picks[: 1 + SECURITY_EXTRA]  # 3, where the others get 1
+    assert plan.assignments["tests"] == ["m3.py"]
+    # The 5 slots cover m0-m4; m3 (tests only) and m4 have no bug reviewer; per_role=1 caps it at m3.
+    assert plan.assignments["debt"] == ["m0.py", "m3.py"]
+    assert "up to 3 files" in client.calls[0]["system"]
 
 
 def test_conftest_never_uses_a_test_file_slot():

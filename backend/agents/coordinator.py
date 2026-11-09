@@ -19,6 +19,14 @@ MAX_CANDIDATES = 40
 # coverage: benchmark run 7 gave debt 3 of 5 slots and skipped cache.py, missing both bugs in it.
 # Security picks depend on what a file does, not its metrics, so it isn't topped up.
 TOP_UP_ROLES = ("debt",)
+# Security bugs sit in short files that rank low on risk, and ledger has more input-handling files than
+# five slots: giving security export.py pushed out auth.py or tokens.py, whose bugs only security
+# reports. Those extra files are small, so the slots are cheap.
+SECURITY_EXTRA = 2
+
+
+def role_limit(role: str, per_role: int) -> int:
+    return per_role + (SECURITY_EXTRA if role == "security" else 0)
 
 
 @dataclass
@@ -91,7 +99,13 @@ def make_plan(
     if not cands:
         return Plan(assignments={r: [] for r in ROLES}, reasons={r: "No candidate files." for r in ROLES})
     tests = {f["path"] for f in files if f["is_test"]}
-    system = llm.prompt("coordinator", repo=repo_name, per_role=str(per_role), table=_table(cands, imported_by, tests))
+    system = llm.prompt(
+        "coordinator",
+        repo=repo_name,
+        per_role=str(per_role),
+        security_files=str(role_limit("security", per_role)),
+        table=_table(cands, imported_by, tests),
+    )
     usage = llm.Usage()
     try:
         response = llm.create(
@@ -128,7 +142,7 @@ def make_plan(
             if p in valid and p not in picked:
                 picked.append(p)
         if picked:
-            assignments[role] = picked[:per_role]
+            assignments[role] = picked[: role_limit(role, per_role)]
             reasons[role] = str(entry.get("reason", ""))[:500]
             if role in TOP_UP_ROLES and len(picked) < per_role:
                 assignments[role] += [c["path"] for c in cands if c["path"] not in picked][: per_role - len(picked)]
@@ -146,20 +160,22 @@ COVERAGE_ROLE = "debt"
 
 
 def cover_unassigned(plan: Plan, cands: list[dict[str, Any]], per_role: int) -> None:
-    """Give the debt reviewer the files risky enough for a slot that nobody was assigned.
+    """Give the debt reviewer the files risky enough for a slot that no bug reviewer was assigned.
 
     Ledger benchmark: 15 slots for 15 files, yet the coordinator doubled up on four files and left
     four unreviewed, and three planted bugs sat in those four. The coordinator's picks are kept (any
     rule for which double-up to drop loses something a reviewer found); the debt reviewer, the
     generalist for correctness, takes up to `per_role` extra files instead. Deterministic: risk order.
     """
-    budget = per_role * len(ROLES)
-    assigned = {p for r in ROLES for p in plan.assignments.get(r, [])}
+    budget = sum(role_limit(r, per_role) for r in ROLES)  # every slot the plan has
+    # The tests reviewer reports missing tests, not defects (ledger: it saw paginate's 0-based bug and
+    # rightly reported it as a test gap), so a file only it reviews is still unreviewed for bugs.
+    assigned = {p for r in ROLES if r != "tests" for p in plan.assignments.get(r, [])}
     missing = [c["path"] for c in cands[:budget] if c["path"] not in assigned][:per_role]
     if not missing:
         return
     plan.assignments[COVERAGE_ROLE] = plan.assignments.get(COVERAGE_ROLE, []) + missing
-    note = f"Also covering {len(missing)} risky file(s) no reviewer was assigned."
+    note = f"Also covering {len(missing)} risky file(s) no bug reviewer was assigned."
     plan.reasons[COVERAGE_ROLE] = (plan.reasons.get(COVERAGE_ROLE, "") + " " + note).strip()
 
 

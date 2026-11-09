@@ -4,9 +4,10 @@ Codebase City turns a GitHub repo into a 3D city; Claude agents inspect it and o
 Build plan: 6 phases over ~8 weeks. Current phase: **all phases built; tuning against live runs**.
 Reviews run on Sonnet 5.5 and fixes on Opus 5.5 (ADR 0009). Two planted-bug fixtures: `shop` is
 saturated (13/13, ~100% precision) and guards against regressions; `ledger` is the one to improve
-(9/14 at baseline, 12/14 with the coverage floor; 100% precision, 0/4 decoys). Remaining misses:
-security never gets `export.py` (CSV injection), and the tests reviewer reads a mock-only test
-without flagging it. Next: those two, then more real repos.
+(9/14 at baseline, 12/14 with the coverage floor; 100% precision, 0/4 decoys). Ledger runs 5-6 fixed
+the CSV-injection and mock-only-test misses but lost others to security's slot limit; the follow-up
+(security +2 slots, tests-only files still get a bug reviewer, split on " and ") is not yet measured
+live: run `--fixture ledger` twice and `shop` once before building on it.
 
 ## Layout
 - `backend/ingest/`: deterministic analysis (clone, walk, tree-sitter, lizard, git churn, import graph)
