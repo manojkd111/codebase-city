@@ -30,6 +30,7 @@ class Workspace:
         self.root = self.root.resolve()
         self._known = set(self.files)
         self._cache: dict[str, list[str]] = {}
+        self._spans: dict[str, list[tuple[int, int]]] = {}  # function line spans, for duplicate checks
 
     # -- paths -------------------------------------------------------------------------------
 
@@ -68,6 +69,23 @@ class Workspace:
             text = full.read_bytes().decode("utf-8", "replace")
             self._cache[rel] = text.splitlines()
         return self._cache[rel]
+
+    def enclosing_function(self, path: str, start: int, end: int) -> tuple[int, int] | None:
+        """Lines of the innermost function holding `start`-`end` (or, failing that, `start`).
+
+        Parsed by lizard, never executed. None at module level, or for a file that can't be read.
+        """
+        try:
+            rel = self.normalize(path)
+            if rel not in self._spans:
+                from backend.ingest.complexity import function_spans
+
+                self._spans[rel] = function_spans(rel, "\n".join(self.lines(rel)) + "\n")
+        except (WorkspaceError, OSError):
+            return None
+        spans = self._spans[rel]
+        holding = [s for s in spans if s[0] <= start and end <= s[1]] or [s for s in spans if s[0] <= start <= s[1]]
+        return min(holding, key=lambda s: s[1] - s[0]) if holding else None
 
     def read(self, path: str, start: int = 1, end: int | None = None) -> str:
         lines = self.lines(path)

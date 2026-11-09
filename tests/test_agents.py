@@ -105,7 +105,7 @@ def test_registry_dedupes_the_same_problem_across_agents(fixture_repo):
     assert not debt.run("submit_finding", GOOD).is_error
     sec, sec_stored = boxes["security"]
     dup = sec.run("submit_finding", {**GOOD, "category": "security", "title": "same bug, other angle"})
-    assert dup.is_error and "overlapping lines: #1 from the debt reviewer" in dup.content
+    assert dup.is_error and "same lines or function: #1 from the debt reviewer" in dup.content
     assert sec_stored == [] and sec.duplicates == 1 and sec.rejected == 0
     # A deliberate resubmission means "this is a different problem": the agent decides, so it's stored.
     again = sec.run("submit_finding", {**GOOD, "category": "security", "title": "same bug, other angle"})
@@ -114,6 +114,54 @@ def test_registry_dedupes_the_same_problem_across_agents(fixture_repo):
     assert not tests.run("submit_finding", {**GOOD, "category": "tests", "title": "no test"}).is_error
     far = {"line_start": 4, "line_end": 4, "evidence": "def run(x, y):"}  # line 4 vs 7-9: not overlapping
     assert not sec.run("submit_finding", {**GOOD, **far, "category": "security", "title": "x"}).is_error
+
+
+def test_same_function_is_a_possible_repeat_within_one_category(fixture_repo):
+    # Live run 12: a repeat of #90 cited line 285 instead of 297-307 of the same function and was stored.
+    from backend.agents.tools import FindingRegistry
+
+    tb, stored = _toolbox(fixture_repo, "tests")
+    ws = tb.workspace
+    assert ws.enclosing_function("pkg/core.py", 7, 9) == (4, 10)  # def run(x, y): ... return os.sep
+    assert ws.enclosing_function("pkg/core.py", 1, 1) is None  # module level
+    tb.registry = FindingRegistry(scope=ws.enclosing_function)
+    tb.registry.seed_prior(
+        [
+            {"id": 50, "category": "tests", "file": "pkg/core.py", "line_start": 5, "line_end": 5}
+            | {"title": "run() untested", "status": "rejected"},
+            {"id": 51, "category": "debt", "file": "pkg/core.py", "line_start": 7, "line_end": 9}
+            | {"title": "loop", "status": "open"},
+        ]
+    )
+    gap = {**GOOD, "category": "tests", "title": "no test for the loop"}  # lines 7-9, not 5
+    flagged = tb.run("submit_finding", gap)
+    assert flagged.is_error and "#50" in flagged.content and "#51" not in flagged.content and stored == []
+    # Security and debt are compared by lines only: a different line in the same function is not flagged.
+    sec, sec_stored = _toolbox(fixture_repo, "security")
+    sec.registry = tb.registry
+    line4 = {**GOOD, "category": "security", "line_start": 4, "line_end": 4, "evidence": "def run(x, y):"}
+    assert not sec.run("submit_finding", {**line4, "title": "x"}).is_error and len(sec_stored) == 1
+
+
+def test_a_title_joining_two_statements_is_asked_to_split_once(fixture_repo):
+    # Benchmark runs 9 and 11: two planted bugs in one finding, so one of them was never fixed.
+    from backend.agents.tools import FindingRegistry
+
+    tb, stored = _toolbox(fixture_repo, "debt")
+    tb.registry = FindingRegistry()
+    tb.registry.seed_prior(
+        [
+            {"id": 60, "category": "debt", "file": "pkg/core.py", "line_start": 7, "line_end": 9}
+            | {"title": "earlier", "status": "open"}
+        ]
+    )
+    both = {**GOOD, "title": "Expiry never enforced; signature compared non-constant-time"}
+    asked = tb.run("submit_finding", both)
+    assert asked.is_error and "two problems" in asked.content and stored == [] and tb.rejected == 0
+    # Insisting it's one problem passes the split question but not the repeat check (run 11's trap).
+    dup = tb.run("submit_finding", both)
+    assert dup.is_error and "#60" in dup.content and stored == []
+    assert not tb.run("submit_finding", both).is_error and len(stored) == 1
 
 
 def test_a_rerun_is_told_about_earlier_runs_findings(fixture_repo):

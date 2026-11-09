@@ -15,6 +15,15 @@ class Complexity:
     max: int  # most complex single function
 
 
+def function_spans(filename: str, code: str) -> list[tuple[int, int]]:
+    """(start_line, end_line) of every function lizard finds, nested ones included. 1-based."""
+    try:
+        info = analyze_file.analyze_source_code(filename, code)
+    except Exception:  # lizard on odd input should never break a caller
+        return []
+    return [(f.start_line, f.end_line) for f in info.function_list]
+
+
 def measure(filename: str, code: str) -> Complexity:
     info = analyze_file.analyze_source_code(filename, code)
     ccns = [f.cyclomatic_complexity for f in info.function_list]

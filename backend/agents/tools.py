@@ -137,18 +137,24 @@ PRIOR_STATUSES = ("open", "confirmed", "rejected")
 _PRIOR_LABEL = {"open": "open", "confirmed": "confirmed by a human", "rejected": "dismissed by a human"}
 
 
+Scope = tuple[int, int] | None  # lines of the innermost enclosing function; None at module level
+
+
 class FindingRegistry:
     """Shared by all agents in one run, so the same problem isn't stored twice.
 
-    Overlapping lines don't prove two findings are the same problem (a validation gap and a crash can
-    share a line), so the registry only flags the overlap; the agent decides, and a deliberate
-    resubmission is stored.
+    Two findings may be the same problem when their lines overlap, or, within one category, when
+    they sit in the same function (live run 12: a repeat of #90 cited line 285 instead of 297-307 of
+    the same function and was stored). Neither proves it (a validation gap and a crash can share a
+    line), so the registry only flags; the agent decides, and a deliberate resubmission is stored.
+    `scope` maps (file, start, end) to the enclosing function's lines; without it, lines only.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, scope: Callable[[str, int, int], Scope] | None = None) -> None:
         self._lock = threading.Lock()
-        # category, file, start, end, id, title, source (who reported it, for the agent's message)
-        self._entries: list[tuple[str, str, int, int, int, str, str]] = []
+        self._scope = scope or (lambda _f, _s, _e: None)
+        # category, file, start, end, scope, id, title, source (who reported it, for the agent's message)
+        self._entries: list[tuple[str, str, int, int, Scope, int, str, str]] = []
 
     def seed_prior(self, rows: list[dict[str, Any]]) -> None:
         """Load earlier runs' findings (dicts with id, category, file, line_start, line_end, title,
@@ -158,27 +164,31 @@ class FindingRegistry:
                 if r["status"] not in PRIOR_STATUSES:
                     continue
                 source = f"an earlier run ({_PRIOR_LABEL[r['status']]})"
-                self._entries.append(
-                    (r["category"], r["file"], r["line_start"], r["line_end"], r["id"], r["title"], source)
-                )
+                file, start, end = r["file"], r["line_start"], r["line_end"]
+                scope = self._scope(file, start, end)
+                self._entries.append((r["category"], file, start, end, scope, r["id"], r["title"], source))
 
     @staticmethod
-    def overlaps(a: tuple[str, str, int, int], b: tuple[str, str, int, int]) -> bool:
-        cat_a, file_a, s_a, e_a = a
-        cat_b, file_b, s_b, e_b = b
-        if file_a != file_b or s_a > e_b + 1 or s_b > e_a + 1:
+    def overlaps(a: tuple[str, str, int, int, Scope], b: tuple[str, str, int, int, Scope]) -> bool:
+        cat_a, file_a, s_a, e_a, scope_a = a
+        cat_b, file_b, s_b, e_b, scope_b = b
+        if file_a != file_b:
             return False
-        return cat_a == cat_b or {cat_a, cat_b} <= OVERLAPPING_ROLES
+        if s_a <= e_b + 1 and s_b <= e_a + 1:  # the lines overlap
+            return cat_a == cat_b or {cat_a, cat_b} <= OVERLAPPING_ROLES
+        # Same function, same category. Not across security/debt: they often report different
+        # problems in one function, and each false flag costs the agent a turn.
+        return cat_a == cat_b and scope_a is not None and scope_a == scope_b
 
     def claim(self, f: AcceptedFinding, store: Callable[[AcceptedFinding], int], *, force: bool = False) -> int:
         """Store `f` unless it overlaps an existing finding (and isn't forced). Check-and-store is atomic."""
-        key = (f.category, f.file, f.line_start, f.line_end)
+        key = (f.category, f.file, f.line_start, f.line_end, self._scope(f.file, f.line_start, f.line_end))
         with self._lock:
             if not force:
                 matches = [
                     (fid, source, title)
-                    for cat, file, start, end, fid, title, source in self._entries
-                    if self.overlaps(key, (cat, file, start, end))
+                    for cat, file, start, end, scope, fid, title, source in self._entries
+                    if self.overlaps(key, (cat, file, start, end, scope))
                 ]
                 if matches:
                     raise PossibleDuplicate(matches)
@@ -202,6 +212,7 @@ class ToolBox:
     rejected: int = 0
     duplicates: int = 0
     _flagged: set[tuple[str, int, int, str]] = field(default_factory=set)
+    _split_asked: set[tuple[str, int, int, str]] = field(default_factory=set)  # kept apart from _flagged
     _seen: set[tuple[str, int, str]] = field(default_factory=set)
 
     def run(self, name: str, args: dict[str, Any]) -> ToolResult:
@@ -263,6 +274,17 @@ class ToolBox:
             needs_human_review=conf < 0.6 or f["severity"] == "critical",
         )
         attempt = (rel, finding.line_start, finding.line_end, finding.title.lower())
+        if ";" in finding.title and attempt not in self._split_asked:
+            # Benchmark runs 9 and 11: Sonnet joined two planted bugs in one title ("expiry never
+            # enforced; signature compared non-constant-time"), and whoever fixes the first never sees
+            # the second. Asked once; a resubmission is the agent saying it is one problem.
+            self._split_asked.add(attempt)
+            return ToolResult(
+                "Not stored yet: the title joins two statements with ';', which usually means two problems "
+                "in one finding. If so, submit each as its own finding with its own lines and evidence. If it "
+                "really is one problem, submit it again unchanged.",
+                is_error=True,
+            )
         try:
             fid = self.registry.claim(finding, self.on_finding, force=attempt in self._flagged)
         except PossibleDuplicate as d:
@@ -270,7 +292,7 @@ class ToolBox:
             self.duplicates += 1
             listed = "; ".join(f"#{fid} from {source}: {title!r}" for fid, source, title in d.matches)
             return ToolResult(
-                f"Not stored yet: these findings cover overlapping lines: {listed}. If yours is the same "
+                f"Not stored yet: these findings cover the same lines or function: {listed}. If yours is the same "
                 "problem as any of them, move on. If it is different from all of them, submit it again "
                 "unchanged and it will be stored.",
                 is_error=True,

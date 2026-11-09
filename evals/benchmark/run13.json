@@ -1,0 +1,225 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 1.0,
+  "precision_floor": 0.8,
+  "matched": {
+    "sqli": 2,
+    "hardcoded-secret": 3,
+    "timing-compare": 9,
+    "no-expiry": 4,
+    "shell-injection": 0,
+    "pickle": 1,
+    "unauth-checkout": 5,
+    "missing-product": 17,
+    "mutable-default": 6,
+    "file-leak": 7,
+    "no-assert": 10,
+    "swallowed": 11,
+    "pricing-untested": 12
+  },
+  "known_real": {
+    "flash-any": 8,
+    "stored-pre-discount": 19,
+    "wrong-discount-args": 18
+  },
+  "missed": [],
+  "findings": [
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 13,
+      "line_end": 13,
+      "title": "Shell command injection via filename in make_thumbnail"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe deserialization of request body with pickle"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 15,
+      "line_end": 15,
+      "title": "SQL injection in find_products via string-formatted LIKE query"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded token signing key in source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "Non-constant-time signature comparison"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "checkout does not reject unauthenticated requests"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes all remember() callers share one hidden store"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 10,
+      "line_end": 13,
+      "title": "File handle is never closed in load_snapshot"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 28,
+      "title": "Discounts stack with float arithmetic and no handling of negative totals"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 23,
+      "title": "Token expiry never enforced, TOKEN_TTL unused"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing swallows every exception and cannot fail"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "Discount and shipping pricing rules have no tests"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 24,
+      "title": "Token signing and verification have no tests"
+    },
+    {
+      "file": "app/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 32,
+      "title": "add_order total calculation and persistence are untested"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 16,
+      "line_end": 18,
+      "title": "Cache expiry filtering and remember/load_snapshot are untested"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "checkout handler flow has no tests"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 28,
+      "line_end": 29,
+      "title": "add_order raises TypeError on unknown product id"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 25,
+      "line_end": 26,
+      "title": "Checkout stores the undiscounted total but returns the discounted one"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 26,
+      "line_end": 26,
+      "title": "Checkout never passes member status and never charges shipping"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/auth.py",
+        "app/handlers.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Auth, request handlers, and database helpers are the most likely to process untrusted input (authentication bypass, injection); cache may hold unsafe deserialization or key handling."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "app/db.py",
+        "tests/test_db.py"
+      ],
+      "reason": "Pricing has the highest complexity with no test importers; auth, handlers, and cache have no test importers either, and db has only partial test coverage."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/cache.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/handlers.py"
+      ],
+      "reason": "Pricing has the highest complexity (ccn_max 12) with branching-heavy logic prone to bugs; cache, auth, and db have moderate complexity and could hide defects."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 89402,
+  "output_tokens": 15383,
+  "cache_read_tokens": 73772,
+  "cost_usd": 0.2076
+}

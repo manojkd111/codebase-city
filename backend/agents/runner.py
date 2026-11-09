@@ -226,7 +226,8 @@ def execute_analysis(
 
                 return store
 
-            registry = FindingRegistry()  # one per run: agents don't store the same problem twice
+            # One per run, so agents don't store the same problem twice; functions come from lizard.
+            registry = FindingRegistry(scope=workspace.enclosing_function)
             with sessions() as s:  # ...nor repeat what an earlier run of this repo already reported
                 prior = s.scalars(
                     select(Finding).where(

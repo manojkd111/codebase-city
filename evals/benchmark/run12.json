@@ -1,0 +1,197 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 1.0,
+  "precision_floor": 0.7647058823529411,
+  "matched": {
+    "sqli": 8,
+    "hardcoded-secret": 3,
+    "timing-compare": 9,
+    "no-expiry": 4,
+    "shell-injection": 5,
+    "pickle": 6,
+    "unauth-checkout": 7,
+    "missing-product": 2,
+    "mutable-default": 0,
+    "file-leak": 1,
+    "no-assert": 11,
+    "swallowed": 10,
+    "pricing-untested": 12
+  },
+  "known_real": {},
+  "missed": [],
+  "findings": [
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes cache store shared across all callers"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 11,
+      "line_end": 13,
+      "title": "File handle never closed in load_snapshot"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 30,
+      "title": "add_order crashes on unknown product id with TypeError"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded token signing key in source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 23,
+      "title": "Token expiry never enforced (TOKEN_TTL unused)"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 13,
+      "line_end": 13,
+      "title": "Shell command injection via filename in make_thumbnail"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "checkout proceeds without a valid authenticated user"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "SQL injection in product search"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "low",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "Non-constant-time signature comparison"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing cannot fail: exceptions swallowed and nothing asserted"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion on search results"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "Discount and shipping logic has no tests at all"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 9,
+      "line_end": 24,
+      "title": "Token signing/verification and expiry (TOKEN_TTL) are untested"
+    },
+    {
+      "file": "app/db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 24,
+      "line_end": 32,
+      "title": "add_order total calculation and persistence are untested"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 16,
+      "line_end": 18,
+      "title": "Cache expiry filtering (recent) and remember have no tests"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "checkout handler flow (auth, order, discount) has no tests"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/auth.py",
+        "app/handlers.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Auth, request handlers, database helpers and cache are the paths most likely to process untrusted input (authn bypass, injection, cache poisoning)."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "app/db.py",
+        "tests/test_db.py"
+      ],
+      "reason": "Pricing, auth, handlers and cache have no importing tests; pricing has the highest complexity, and db has only partial test coverage."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/cache.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/handlers.py"
+      ],
+      "reason": "Pricing has the highest complexity (ccn_max 12) and is most prone to logic bugs; cache, auth and db have moderate branching worth checking for defects."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 60827,
+  "output_tokens": 11333,
+  "cache_read_tokens": 36177,
+  "cost_usd": 0.1822
+}
