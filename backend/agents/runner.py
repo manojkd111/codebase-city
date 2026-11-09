@@ -190,6 +190,8 @@ def execute_analysis(
                         input_tokens=r.usage.input_tokens,
                         output_tokens=r.usage.output_tokens,
                         error=r.error,
+                        cache_read_tokens=r.usage.cache_read,
+                        cost_usd=r.usage.cost_usd(settings.model),
                     )
                 )
                 return r
@@ -197,8 +199,8 @@ def execute_analysis(
             with ThreadPoolExecutor(max_workers=max(1, settings.max_concurrent_agents)) as pool:
                 results = list(pool.map(work, jobs))
 
-        total_in = plan.usage.input_tokens + sum(r.usage.input_tokens for r in results)
-        total_out = plan.usage.output_tokens + sum(r.usage.output_tokens for r in results)
+        total = sum((r.usage for r in results), plan.usage)
+        total_in, total_out = total.input_tokens, total.output_tokens
         n_findings = sum(len(r.finding_ids) for r in results)
         with sessions() as s:
             run = s.get(AnalysisRun, run_id)
@@ -213,6 +215,8 @@ def execute_analysis(
                 duration_s=round(time.monotonic() - started, 2),
                 input_tokens=total_in,
                 output_tokens=total_out,
+                cache_read_tokens=total.cache_read,
+                cost_usd=total.cost_usd(settings.model),
             )
         )
         return results

@@ -80,6 +80,8 @@ def run_specialist(
                     output_tokens=result.usage.output_tokens,
                     tool_calls=n_calls,
                     duration_ms=int((time.monotonic() - t0) * 1000),
+                    cache_read_tokens=result.usage.cache_read,
+                    cost_usd=result.usage.cost_usd(model),
                 )
             )
             # Append the full content (thinking blocks included) unchanged: the history stays append-only.

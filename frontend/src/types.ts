@@ -147,6 +147,9 @@ export type CityEvent =
         output_tokens: number;
         tool_calls: number;
         duration_ms: number;
+        // Absent on events stored before billed cost was tracked.
+        cache_read_tokens?: number;
+        cost_usd?: number | null;
       };
     }
   | {
@@ -172,11 +175,21 @@ export type CityEvent =
         input_tokens: number;
         output_tokens: number;
         error: string | null;
+        cache_read_tokens?: number;
+        cost_usd?: number | null;
       };
     }
   | {
       type: "analysis.completed";
-      data: { run_id: number; findings: number; duration_s: number; input_tokens: number; output_tokens: number };
+      data: {
+        run_id: number;
+        findings: number;
+        duration_s: number;
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_tokens?: number;
+        cost_usd?: number | null;
+      };
     }
   | { type: "analysis.failed"; data: { run_id: number; error: string } }
   | { type: "finding.updated"; data: { finding_id: number; status: FindingStatus } }

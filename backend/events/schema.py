@@ -136,10 +136,13 @@ class AgentTurn(Payload):
     agent_id: str
     turn: int
     max_turns: int
-    input_tokens: int  # cumulative for this agent
+    input_tokens: int  # cumulative for this agent, cached or not
     output_tokens: int
     tool_calls: int  # requested in this turn
     duration_ms: int  # model latency for this turn
+    # Defaults keep events stored before these fields existed valid; cost_usd None = no price known.
+    cache_read_tokens: int = 0  # cumulative; the part of input_tokens billed at the cache-read rate
+    cost_usd: float | None = None  # cumulative billed cost at list price
 
 
 class AgentToolCall(Payload):
@@ -165,6 +168,8 @@ class AgentFinished(Payload):
     input_tokens: int
     output_tokens: int
     error: str | None = None
+    cache_read_tokens: int = 0
+    cost_usd: float | None = None
 
 
 class AnalysisCompleted(Payload):
@@ -174,6 +179,8 @@ class AnalysisCompleted(Payload):
     duration_s: float
     input_tokens: int
     output_tokens: int
+    cache_read_tokens: int = 0
+    cost_usd: float | None = None  # whole run, coordinator included
 
 
 class AnalysisFailed(Payload):

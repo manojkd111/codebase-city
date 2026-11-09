@@ -20,14 +20,16 @@ from sqlalchemy import select
 
 from backend.agents.runner import execute_analysis
 from backend.config import get_settings
-from backend.db.models import AnalysisRun, File, Finding, Repo
+from backend.db.models import AnalysisRun, EventRow, File, Finding, Repo
 from backend.db.session import make_engine, make_session_factory
 from backend.ingest.runner import execute_ingest
 
 from .score import HERE, Score, hotspot_recall, load_planted, score
 
-# Opus 5.5 list prices, $ per million tokens; cached input is billed lower, so this is an upper bound.
+# Opus 5.5 list prices, $ per million tokens. Only for saved runs from before the billed cost was
+# recorded: pricing all input at the full rate overstates an agent loop's cost about 5x.
 PRICE_IN, PRICE_OUT = 4.0, 20.0
+USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cost_usd")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,8 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     planted = load_planted()
     if args.rescore:
         saved = json.loads(args.rescore.read_text(encoding="utf-8"))
-        usage = (saved.get("input_tokens", 0), saved.get("output_tokens", 0))
-        _report(saved["findings"], planted, usage)
+        _report(saved["findings"], planted, {k: saved.get(k) for k in USAGE_KEYS})
         return 0
 
     fixture = (HERE / "planted" / "shop").resolve()
@@ -93,8 +94,13 @@ def _bench(args, settings, sessions, fixture, planted) -> int:
             {k: getattr(f, k) for k in ("file", "category", "severity", "line_start", "line_end", "title")}
             for f in s.scalars(select(Finding).where(Finding.run_id == run_id).order_by(Finding.id))
         ]
-        usage = (run.input_tokens, run.output_tokens)
         plan = run.plan  # which files each reviewer got: the first thing to check on a miss
+        done = s.scalars(
+            select(EventRow)
+            .where(EventRow.repo_id == run.repo_id, EventRow.type == "analysis.completed")
+            .order_by(EventRow.seq.desc())
+        ).first()
+        usage = {k: (done.data.get(k) if done else None) for k in USAGE_KEYS}
 
     sc = _report(findings, planted, usage)
     result |= {
@@ -105,24 +111,32 @@ def _bench(args, settings, sessions, fixture, planted) -> int:
         "missed": sc.missed,
         "findings": findings,
         "plan": plan,
-        "input_tokens": usage[0],
-        "output_tokens": usage[1],
+        **usage,
     }
     _write(args.json, result)
     return 0
 
 
-def _report(findings: list[dict], planted: list, usage: tuple[int, int]) -> Score:
+def _cost_line(usage: dict) -> str:
+    tin, tout = usage.get("input_tokens") or 0, usage.get("output_tokens") or 0
+    line = f"tokens: {tin:,} in / {tout:,} out"
+    if usage.get("cost_usd") is not None:
+        cached = (usage.get("cache_read_tokens") or 0) / tin if tin else 0
+        return f"{line}  ({cached:.0%} of input from cache)  cost: ${usage['cost_usd']:.2f} at list price"
+    upper = tin / 1e6 * PRICE_IN + tout / 1e6 * PRICE_OUT
+    return f"{line}  (<= ${upper:.2f}: recorded before billed cost was tracked; real cost is lower)"
+
+
+def _report(findings: list[dict], planted: list, usage: dict) -> Score:
     known = load_planted(key="known_real")
     sc = score(findings, planted, known)
-    cost = usage[0] / 1e6 * PRICE_IN + usage[1] / 1e6 * PRICE_OUT
     correct = len(sc.matched) + len(sc.known)
     print(f"recall: {len(sc.matched)}/{sc.total_planted} = {sc.recall:.0%}")
     print(
         f"precision (floor): {correct}/{sc.total_findings} = {sc.precision_floor:.0%}"
         f"  ({len(sc.matched)} planted + {len(sc.known)} known-real)"
     )
-    print(f"tokens: {usage[0]:,} in / {usage[1]:,} out  (<= ${cost:.2f} at list price)")
+    print(_cost_line(usage))
     for p in planted:
         mark = "found " if p.id in sc.matched else "MISSED"
         print(f"  {mark} {p.id:<20} {p.file}:{p.line}  {p.what}")

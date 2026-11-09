@@ -40,22 +40,54 @@ def prompt(name: str, **values: str) -> str:
     return text
 
 
+# $ per million tokens: (input, output, cache write, cache read). Cache writes use the default
+# 5-minute TTL (1.25x input). Turns served by a refusal fallback model bill at that model's rates;
+# they're rare, so costs are computed at the configured model's prices.
+PRICES: dict[str, tuple[float, float, float, float]] = {
+    "claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
+}
+
+
 @dataclass
 class Usage:
-    input_tokens: int = 0
+    """Token counts split the way they're billed. Agent loops resend the whole history every turn,
+    so most input is cache reads at a fraction of the input price; one total would overstate cost ~5x.
+    """
+
+    uncached_input: int = 0
+    cache_write: int = 0
+    cache_read: int = 0
     output_tokens: int = 0
+
+    @property
+    def input_tokens(self) -> int:
+        """All input, cached or not (what the model read)."""
+        return self.uncached_input + self.cache_write + self.cache_read
 
     def add(self, response: Any) -> None:
         u = getattr(response, "usage", None)
         if u is None:
             return
-        # Cached reads/writes are input too; count them so cost estimates aren't flattering.
-        self.input_tokens += (
-            (getattr(u, "input_tokens", 0) or 0)
-            + (getattr(u, "cache_read_input_tokens", 0) or 0)
-            + (getattr(u, "cache_creation_input_tokens", 0) or 0)
-        )
+        self.uncached_input += getattr(u, "input_tokens", 0) or 0
+        self.cache_write += getattr(u, "cache_creation_input_tokens", 0) or 0
+        self.cache_read += getattr(u, "cache_read_input_tokens", 0) or 0
         self.output_tokens += getattr(u, "output_tokens", 0) or 0
+
+    def __add__(self, other: Usage) -> Usage:
+        return Usage(
+            self.uncached_input + other.uncached_input,
+            self.cache_write + other.cache_write,
+            self.cache_read + other.cache_read,
+            self.output_tokens + other.output_tokens,
+        )
+
+    def cost_usd(self, model: str) -> float | None:
+        """Billed cost at list price, or None for a model without a price entry."""
+        p = PRICES.get(model)
+        if p is None:
+            return None
+        cost = self.uncached_input * p[0] + self.output_tokens * p[1] + self.cache_write * p[2] + self.cache_read * p[3]
+        return round(cost / 1e6, 4)
 
 
 def create(client: Any, *, model: str, effort: str, max_tokens: int = 16000, **kwargs: Any) -> Any:

@@ -251,6 +251,8 @@ def test_full_analysis_run_streams_drone_events_and_stores_verified_findings(tmp
     debt_turns = [t for t in turns if t["agent_id"].startswith("debt")]
     assert [t["turn"] for t in debt_turns] == [1, 2, 3]
     assert debt_turns[-1]["input_tokens"] > debt_turns[0]["input_tokens"]  # cumulative
+    # Billed cost travels with the events (fake usage: 100 uncached in / 20 out per turn, Opus 5.5 prices).
+    assert debt_turns[-1]["cost_usd"] == pytest.approx(3 * (100 * 4 + 20 * 20) / 1e6)
     assert analysis[-1] == "analysis.completed"
     assert seqs == list(range(1, len(seqs) + 1))  # one gap-free stream across ingest + parallel agents
 
@@ -258,6 +260,40 @@ def test_full_analysis_run_streams_drone_events_and_stores_verified_findings(tmp
     debt_calls = [c for c in client.calls if agent_route(c) == "debt"]
     assert all(t.get("strict") for t in debt_calls[0]["tools"])
     assert len(debt_calls[2]["messages"]) == 5  # user, assistant, results, assistant, results
+
+
+def test_usage_prices_cached_input_at_the_cache_rate():
+    from types import SimpleNamespace
+
+    from backend.agents.llm import Usage
+
+    u = Usage()
+    u.add(
+        SimpleNamespace(
+            usage=SimpleNamespace(
+                input_tokens=1_000, cache_creation_input_tokens=2_000, cache_read_input_tokens=10_000, output_tokens=500
+            )
+        )
+    )
+    assert u.input_tokens == 13_000  # everything the model read
+    # 1k uncached at $4, 2k written at $5, 10k read at $0.20, 500 out at $20 (per million)
+    assert u.cost_usd("claude-opus-5-5") == pytest.approx((4_000 + 10_000 + 2_000 + 10_000) / 1e6)
+    # The old way priced all 13k input at $4: ~2x too high here, ~5x on a long agent loop.
+    assert u.cost_usd("claude-opus-5-5") < (13_000 * 4 + 500 * 20) / 1e6
+    assert u.cost_usd("some-unpriced-model") is None
+    total = u + u
+    assert total.cache_read == 20_000 and total.cost_usd("claude-opus-5-5") == pytest.approx(2 * 0.026)
+
+
+def test_events_stored_before_cost_tracking_still_load():
+    from backend.events.schema import AgentTurn
+
+    old = {
+        "run_id": 6, "agent_id": "debt-6", "turn": 26, "max_turns": 30,
+        "input_tokens": 1_268_110, "output_tokens": 15_933, "tool_calls": 0, "duration_ms": 8181,
+    }  # fmt: skip
+    turn = AgentTurn.model_validate(old)
+    assert turn.cost_usd is None and turn.cache_read_tokens == 0
 
 
 def test_analysis_without_credentials_fails_cleanly(tmp_path, fixture_repo, monkeypatch):

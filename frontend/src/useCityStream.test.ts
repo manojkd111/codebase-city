@@ -159,6 +159,26 @@ describe("live agent activity", () => {
     expect(s.activity.at(-1)!.text).toContain("evidence was not found");
   });
 
+  it("uses the server's billed cost, and treats a total as unknown if any agent's cost is", () => {
+    const turn = (seq: number, agent: string, cost?: number) =>
+      env(seq, "agent.turn", {
+        run_id: 1, agent_id: agent, turn: 1, max_turns: 30, input_tokens: 1000, output_tokens: 200,
+        tool_calls: 0, duration_ms: 1, ...(cost === undefined ? {} : { cache_read_tokens: 800, cost_usd: cost }),
+      });
+    const dispatch = (seq: number, agent: string) =>
+      env(seq, "agent.dispatched", { run_id: 1, agent_id: agent, role: "debt", files: [], reason: "" });
+    const start = env(1, "analysis.started", { run_id: 1, model: "m" });
+
+    const s = applyEvents(base, [start, dispatch(2, "a"), dispatch(3, "b"), turn(4, "a", 0.5), turn(5, "b", 0.25)], 0);
+    expect(s.agents["a"].costUsd).toBe(0.5);
+    expect(s.analysis!.costUsd).toBe(0.75);
+
+    // An event recorded before cost tracking (no cost_usd) leaves the cost unknown, not zero.
+    const old = applyEvents(base, [start, dispatch(2, "a"), dispatch(3, "b"), turn(4, "a", 0.5), turn(5, "b")], 0);
+    expect(old.agents["b"].costUsd).toBeNull();
+    expect(old.analysis!.costUsd).toBeNull();
+  });
+
   it("caps the activity log", () => {
     const evs = [env(1, "analysis.started", { run_id: 1, model: "m" })];
     for (let i = 0; i < 500; i++)

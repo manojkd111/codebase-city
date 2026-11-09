@@ -4,12 +4,15 @@ import { FIXER_COLOR, ROLE_COLOR, SEVERITY_COLOR } from "./Agents3D";
 import type { Finding, FindingStatus, Fix, Role, ServerConfig } from "./types";
 import type { ActivityEntry, AgentState, CityState, FixState } from "./useCityStream";
 
-// Opus list prices ($/M tokens). Cached input bills lower, so these are upper bounds.
+// The server sends the billed cost. These list prices only cover events recorded before it did,
+// and give an upper bound: they price resent (cached) input at the full rate, ~5x too high for an agent loop.
 const PRICE_IN = 4;
 const PRICE_OUT = 20;
 const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3 } as const;
-const cost = (tin: number, tout: number) => (tin * PRICE_IN + tout * PRICE_OUT) / 1e6;
 const money = (v: number) => (v < 0.01 && v > 0 ? "<$0.01" : `$${v.toFixed(2)}`);
+/** Billed cost when the server recorded it, else an upper bound marked with ≤. */
+const costText = (x: { costUsd: number | null; tokensIn: number; tokensOut: number }) =>
+  x.costUsd != null ? money(x.costUsd) : `≤${money((x.tokensIn * PRICE_IN + x.tokensOut * PRICE_OUT) / 1e6)}`;
 const ktok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k` : `${n}`);
 
 function elapsed(from: number, to: number) {
@@ -101,9 +104,15 @@ export function MissionControl(p: Props) {
               <dt>Tokens</dt>
               <dd>{ktok(a.tokensIn + a.tokensOut)}</dd>
             </div>
-            <div title="Upper bound at Opus list price; cached input bills lower">
-              <dt>Cost ≤</dt>
-              <dd>{money(cost(a.tokensIn, a.tokensOut))}</dd>
+            <div
+              title={
+                a.costUsd != null
+                  ? "Billed cost at list price, with cached input at the cache-read rate"
+                  : "Upper bound: recorded before billed cost was tracked"
+              }
+            >
+              <dt>Cost</dt>
+              <dd>{costText(a)}</dd>
             </div>
             <div>
               <dt>Found</dt>
@@ -238,7 +247,7 @@ function AgentCard({ ag, now, onFocusFile }: { ag: AgentState; now: number; onFo
         <div className="muted small meta">
           turn {ag.turns}
           {ag.maxTurns ? `/${ag.maxTurns}` : ""} · {ag.toolCalls} tool calls · {ktok(ag.tokensIn + ag.tokensOut)} tok ·{" "}
-          {money(cost(ag.tokensIn, ag.tokensOut))} · {ag.findings} found
+          {costText(ag)} · {ag.findings} found
           {ag.rejected > 0 && ` · ${ag.rejected} rejected`}
         </div>
         {!working && ag.reason && <div className="muted small">{ag.reason}</div>}

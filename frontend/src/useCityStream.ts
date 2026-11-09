@@ -32,6 +32,8 @@ export interface AgentState {
   tokens: number;
   tokensIn: number;
   tokensOut: number;
+  /** billed cost at list price, from the server; null for events recorded before it was tracked */
+  costUsd: number | null;
   /** what the agent is doing right now, from the last tool call */
   lastTool: string | null;
   lastTarget: string | null;
@@ -51,6 +53,11 @@ export interface ActivityEntry {
 }
 
 const ACTIVITY_LIMIT = 400;
+
+/** A total is only known if every part is: one agent without a recorded cost makes it unknown. */
+export function sumCosts(costs: (number | null)[]): number | null {
+  return costs.some((c) => c == null) ? null : costs.reduce<number>((n, c) => n + (c as number), 0);
+}
 
 export interface FindingMark {
   id: number;
@@ -82,6 +89,7 @@ export interface AnalysisState {
   findings: number;
   tokensIn: number;
   tokensOut: number;
+  costUsd: number | null;
   durationS: number | null;
   error: string | null;
   startedAt: number;
@@ -229,6 +237,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
           findings: 0,
           tokensIn: 0,
           tokensOut: 0,
+          costUsd: null,
           durationS: null,
           error: null,
           startedAt: ts,
@@ -253,6 +262,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
           tokens: 0,
           tokensIn: 0,
           tokensOut: 0,
+          costUsd: null,
           lastTool: null,
           lastTarget: null,
           toolCalls: 0,
@@ -276,6 +286,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
             tokensIn: e.data.input_tokens,
             tokensOut: e.data.output_tokens,
             tokens: e.data.input_tokens + e.data.output_tokens,
+            costUsd: e.data.cost_usd ?? null,
           });
         if (s.analysis) {
           // Live run totals: sum the latest cumulative counts of every agent.
@@ -284,6 +295,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
             ...s.analysis,
             tokensIn: all.reduce((n, x) => n + x.tokensIn, 0),
             tokensOut: all.reduce((n, x) => n + x.tokensOut, 0),
+            costUsd: sumCosts(all.map((x) => x.costUsd)),
           };
         }
         break;
@@ -333,6 +345,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
             tokens: e.data.input_tokens + e.data.output_tokens,
             tokensIn: e.data.input_tokens,
             tokensOut: e.data.output_tokens,
+            costUsd: e.data.cost_usd ?? null,
             finishedAt: ts,
             error: e.data.error,
           });
@@ -354,6 +367,7 @@ export function applyEvents(prev: CityState, events: Envelope[], now: number): C
             findings: e.data.findings,
             tokensIn: e.data.input_tokens,
             tokensOut: e.data.output_tokens,
+            costUsd: e.data.cost_usd ?? null,
             durationS: e.data.duration_s,
           };
         log(
