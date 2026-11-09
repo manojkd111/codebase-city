@@ -2,11 +2,11 @@
 // Nothing here moves or resizes a building: streets live in the margin between lots, and
 // gardens only use grid cells past a folder's announced file count, which never get a building.
 
-import type { CityLayout, Rect } from "./layout";
+import { STREET, type CityLayout, type Rect } from "./layout";
 
 export const SIDEWALK = 0.32;
 export const ROAD_Y = -0.12; // road surface; sidewalks sit above it, plots at y = 0 under the buildings
-const RING = 0.8; // half-width of the ring road outside the outermost lots (matches STREET / 2)
+const RING = STREET / 2; // half-width of the ring road outside the outermost lots
 
 export interface Segment {
   x1: number;

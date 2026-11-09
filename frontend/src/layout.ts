@@ -100,7 +100,9 @@ export function squarify<T>(items: T[], value: (t: T) => number, rect: Rect): { 
   return out;
 }
 
-export const STREET = 1.6;
+export const STREET = 2.6;
+// Plot sizing was tuned with 1.6-wide streets; wider streets grow the city instead of shrinking plots.
+const TUNED_STREET = 1.6;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function buildingHeight(complexity: number): number {
@@ -111,7 +113,9 @@ export function layoutCity(districts: District[], buildings: Building[]): CityLa
   const files = districts.reduce((s, d) => s + d.file_count, 0);
   const bytes = districts.reduce((s, d) => s + d.total_bytes, 0);
   const avg = files ? bytes / files : 1;
-  const size = Math.sqrt(Math.max(files, 1)) * 6 + 10;
+  // One extra street's width per row of lots (roughly sqrt(districts) of them), plus the outer edge.
+  const extra = (STREET - TUNED_STREET) * (Math.ceil(Math.sqrt(Math.max(districts.length, 1))) + 1);
+  const size = Math.sqrt(Math.max(files, 1)) * 6 + 10 + extra;
 
   // Lot area blends file count and bytes, so a district of many tiny files
   // still has room for its buildings and one huge file doesn't swallow the map.

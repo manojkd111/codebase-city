@@ -1,10 +1,11 @@
-// Drones, finding beacons and fix scaffolding. Everything here is driven by the event stream:
-// a drone's target is simply the building for the file its agent last touched.
+// Drones, the carrier plane, finding beacons and fix scaffolding. Everything here is driven by the
+// event stream: a drone's target is simply the building for the file its agent last touched.
 
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { Carrier, DOCKS, useCarrierState, type CarrierState } from "./Carrier";
 import type { CityLayout, Placed } from "./layout";
 import type { Role, Severity } from "./types";
 import type { AgentState, FindingMark, FixState } from "./useCityStream";
@@ -37,25 +38,34 @@ interface Props {
   agents: Record<string, AgentState>;
   findings: Record<number, FindingMark>;
   fixes: Record<number, FixState>;
+  /** an analysis is in progress: the carrier is on station and its drones may fly */
+  analysisRunning: boolean;
   onSelect: (path: string) => void;
 }
 
-export function AgentsLayer({ layout, agents, findings, fixes, onSelect }: Props) {
+export function AgentsLayer({ layout, agents, findings, fixes, analysisRunning, onSelect }: Props) {
   const byPath = usePlacedByPath(layout);
+  const carrier = useCarrierState();
   const list = Object.values(agents);
   const activeFixes = Object.values(fixes).filter((f) => f.status === "running");
   return (
     <group>
-      {list.map((a, i) => (
-        <Drone
-          key={a.id}
-          color={ROLE_COLOR[a.role]}
-          label={a.role}
-          target={a.status === "working" && a.path ? byPath.get(a.path) : undefined}
-          home={hangar(layout, i)}
-          active={a.status === "working"}
-        />
-      ))}
+      <Carrier layout={layout} carrier={carrier} running={analysisRunning} crew={list.map((a) => a.id)} />
+      {list.map((a, i) => {
+        // A run that ended (or failed) recalls every drone, even one whose agent never reported back.
+        const active = analysisRunning && a.status === "working";
+        return (
+          <Drone
+            key={a.id}
+            color={ROLE_COLOR[a.role]}
+            label={a.role}
+            target={active && a.path ? byPath.get(a.path) : undefined}
+            home={carrier.docks[i % DOCKS]}
+            active={active}
+            stow={{ carrier, id: a.id }}
+          />
+        );
+      })}
       {activeFixes.map((f, i) => {
         const file = findings[f.findingId]?.file;
         const p = file ? byPath.get(file) : undefined;
@@ -67,7 +77,7 @@ export function AgentsLayer({ layout, agents, findings, fixes, onSelect }: Props
               color={FIXER_COLOR}
               label={`fixer${f.step ? ` · ${f.step}` : ""}`}
               target={p}
-              home={hangar(layout, list.length + i)}
+              home={hangar(layout, i)}
               active
             />
           </group>
@@ -84,28 +94,44 @@ function Drone({
   target,
   home,
   active,
+  stow,
 }: {
   color: string;
   label: string;
   target: Placed | undefined;
+  /** where the drone rests; a carrier dock moves every frame, and the drone follows it */
   home: THREE.Vector3;
   active: boolean;
+  /** a carrier drone: hidden once it's back aboard, and reported so the carrier knows when to leave */
+  stow?: { carrier: CarrierState; id: string };
 }) {
   const group = useRef<THREE.Group>(null);
   const body = useRef<THREE.Mesh>(null);
   const beam = useRef<THREE.Mesh>(null);
-  const pos = useRef(home.clone());
+  const pos = useRef<THREE.Vector3 | null>(null);
   const goal = useMemo(() => new THREE.Vector3(), []);
+
+  const carrier = stow?.carrier;
+  const id = stow?.id;
+  useEffect(() => () => void (id && carrier?.aboard.delete(id)), [carrier, id]);
 
   useFrame((state, dt) => {
     const g = group.current;
     if (!g) return;
+    // Start at home as it is on the first frame (a carrier dock is only placed once the plane has flown).
+    if (!pos.current) pos.current = home.clone();
     const t = state.clock.elapsedTime;
     if (target) goal.set(target.x, target.height + 2.6, target.z);
     else goal.copy(home);
     // Critically damped approach: fast when far, settles without overshoot.
     pos.current.lerp(goal, 1 - Math.exp(-dt * 2.2));
     g.position.set(pos.current.x, pos.current.y + Math.sin(t * 2.4) * 0.18, pos.current.z);
+    if (stow) {
+      const aboard = !active && pos.current.distanceTo(home) < 0.8;
+      if (aboard) stow.carrier.aboard.add(stow.id);
+      else stow.carrier.aboard.delete(stow.id);
+      g.visible = !aboard && (active || stow.carrier.present);
+    }
     if (body.current) body.current.rotation.y += dt * 2.2;
     if (beam.current) {
       const arrived = !!target && pos.current.distanceTo(goal) < 0.6;

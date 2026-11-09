@@ -26,6 +26,7 @@ interface Props {
   agents: Record<string, AgentState>;
   findings: Record<number, FindingMark>;
   fixes: Record<number, FixState>;
+  analysisRunning: boolean;
   /** "Trace dependencies": arcs from the selected building to the files it imports and that import it. */
   trace: ImportNeighbors | null;
 }
@@ -70,6 +71,7 @@ export function City(props: Props) {
         agents={props.agents}
         findings={props.findings}
         fixes={props.fixes}
+        analysisRunning={props.analysisRunning}
         onSelect={(p) => props.onSelect(p)}
       />
       {props.trace && <TraceLayer layout={layout} trace={props.trace} />}

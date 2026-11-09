@@ -233,6 +233,7 @@ export default function App() {
             agents={city.agents}
             findings={city.findings}
             fixes={city.fixes}
+            analysisRunning={city.analysis?.status === "running"}
             trace={trace}
           />
         )}
