@@ -25,7 +25,8 @@ class Planted:
 class Score:
     matched: dict[str, int] = field(default_factory=dict)  # planted id -> finding index
     missed: list[str] = field(default_factory=list)
-    unmatched: list[int] = field(default_factory=list)  # finding indexes that hit nothing planted
+    known: dict[str, int] = field(default_factory=dict)  # known-real id -> finding index (precision only)
+    unmatched: list[int] = field(default_factory=list)  # finding indexes that hit nothing planted or known
     total_planted: int = 0
     total_findings: int = 0
 
@@ -35,15 +36,19 @@ class Score:
 
     @property
     def precision_floor(self) -> float:
-        """Lower bound: unmatched findings may still be real problems the fixture didn't plant."""
-        return len(self.matched) / self.total_findings if self.total_findings else 0.0
+        """Lower bound: unmatched findings may still be real problems nobody has listed yet."""
+        correct = len(self.matched) + len(self.known)
+        return correct / self.total_findings if self.total_findings else 0.0
 
 
-def load_planted(expected_path: Path = HERE / "expected.json", root: Path | None = None) -> list[Planted]:
+def load_planted(
+    expected_path: Path = HERE / "expected.json", root: Path | None = None, key: str = "planted"
+) -> list[Planted]:
+    """`key="known_real"` loads the unplanted-but-real problems instead (same shape)."""
     spec = json.loads(expected_path.read_text(encoding="utf-8"))
     root = root or expected_path.parent / spec["repo"]
     out = []
-    for p in spec["planted"]:
+    for p in spec.get(key, []):
         lines = (root / p["file"]).read_text(encoding="utf-8").splitlines()
         hits = [i for i, line in enumerate(lines, 1) if p["anchor"] in line]
         if len(hits) != 1:
@@ -52,21 +57,34 @@ def load_planted(expected_path: Path = HERE / "expected.json", root: Path | None
     return out
 
 
-def score(findings: list[dict[str, Any]], planted: list[Planted]) -> Score:
-    """Greedy one-to-one matching: each planted problem is credited to at most one finding."""
+def _match(findings: list[dict[str, Any]], p: Planted, used: set[int]) -> int | None:
+    for i, f in enumerate(findings):
+        if i in used or f["file"] != p.file or f["category"] not in p.categories:
+            continue
+        # Overlap between the finding (± SLACK) and the problem's lines.
+        if f["line_start"] - SLACK <= p.line + p.span and p.line <= f["line_end"] + SLACK:
+            used.add(i)
+            return i
+    return None
+
+
+def score(findings: list[dict[str, Any]], planted: list[Planted], known: list[Planted] = ()) -> Score:
+    """Greedy one-to-one matching: each problem is credited to at most one finding.
+
+    Planted problems are matched first, so a known-real problem can never take a finding from one.
+    """
     s = Score(total_planted=len(planted), total_findings=len(findings))
     used: set[int] = set()
     for p in planted:
-        for i, f in enumerate(findings):
-            if i in used or f["file"] != p.file or f["category"] not in p.categories:
-                continue
-            # Overlap between the finding (± SLACK) and the planted problem's lines.
-            if f["line_start"] - SLACK <= p.line + p.span and p.line <= f["line_end"] + SLACK:
-                s.matched[p.id] = i
-                used.add(i)
-                break
-        else:
+        i = _match(findings, p, used)
+        if i is None:
             s.missed.append(p.id)
+        else:
+            s.matched[p.id] = i
+    for k in known:
+        i = _match(findings, k, used)
+        if i is not None:
+            s.known[k.id] = i
     s.unmatched = [i for i in range(len(findings)) if i not in used]
     return s
 

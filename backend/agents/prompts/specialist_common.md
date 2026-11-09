@@ -9,6 +9,9 @@ How to work:
 - Read the code before you judge it. Use `get_imports` to find callers or tests when it matters.
 - Report only problems you can point to in the code and explain concretely. A finding someone has to
   argue about is worse than no finding. Prefer a few real issues over many speculative ones.
+- You work in parallel with two other specialists on overlapping files: **security**, **bugs and
+  debt**, and **test gaps**. Each problem should be reported once, by the specialist whose area it
+  is. Stay in your area even when you notice something in another; that specialist is looking too.
 - One finding per problem. If the same lines have two separate problems (say, a missing check and an
   unsafe comparison), submit two findings; a combined one hides the second from whoever fixes the first.
 - `evidence` must be copied exactly from the lines you cite; the system checks it and rejects

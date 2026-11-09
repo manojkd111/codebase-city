@@ -282,3 +282,13 @@ def test_tests_reviewer_also_gets_the_tests_that_import_its_modules():
     plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by=imported_by, per_role=2)
     assert plan.assignments["tests"] == ["a.py", "b.py", "test_a.py"]  # deduped, appended after the modules
     assert plan.assignments["security"] == ["a.py"]  # other roles unchanged
+
+
+def test_tests_reviewer_gets_tests_of_other_reviewers_modules_when_its_own_are_untested():
+    # Benchmark runs 2 and 3: the tests reviewer got only untested modules, so the weak test file
+    # (which imports a module the other reviewers had) was never attached and its bug was missed.
+    imported_by = {"a.py": ["test_a.py"]}
+    client = FakeClient({"coordinator": [plan_json(["a.py"], ["b.py"], ["c.py"])]}, agent_route)
+    plan = make_plan(client, model="m", effort="low", repo_name="r", files=FILES, imported_by=imported_by, per_role=2)
+    assert plan.assignments["tests"] == ["b.py", "test_a.py"]
+    assert plan.assignments["security"] == ["a.py"]

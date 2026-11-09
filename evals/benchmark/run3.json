@@ -1,0 +1,221 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 0.8461538461538461,
+  "precision_floor": 0.75,
+  "matched": {
+    "hardcoded-secret": 8,
+    "timing-compare": 9,
+    "no-expiry": 18,
+    "shell-injection": 5,
+    "pickle": 6,
+    "unauth-checkout": 7,
+    "missing-product": 1,
+    "mutable-default": 3,
+    "file-leak": 4,
+    "no-assert": 16,
+    "pricing-untested": 11
+  },
+  "known_real": {
+    "negative-qty": 10,
+    "shared-conn": 2,
+    "shipping-untested": 15,
+    "stored-pre-discount": 19
+  },
+  "missed": [
+    "sqli",
+    "swallowed"
+  ],
+  "findings": [
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "Product search builds SQL by string interpolation, so quotes break it and allow injection"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "add_order crashes on unknown product ids and accepts negative or zero quantities"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 6,
+      "line_end": 10,
+      "title": "One global sqlite connection is shared across threads with no locking"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default `store={}` makes one hidden cache shared by every caller"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 11,
+      "line_end": 13,
+      "title": "load_snapshot never closes its file handle"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 12,
+      "line_end": 13,
+      "title": "OS command injection through `file` parameter with shell=True"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "Checkout proceeds when token verification fails"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded HMAC signing key committed to source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "Non-constant-time comparison of HMAC signature"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 30,
+      "line_end": 32,
+      "title": "Order is saved with the pre-discount total, but the customer is shown the discounted amount"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "apply_discount's branchy money logic has no tests"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 16,
+      "line_end": 24,
+      "title": "Token verification untested; missing expiry check and crash path go unnoticed"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "Checkout's unauthenticated path is untested and creates orders with user_id None"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Cache module untested; shared mutable default store leaks between callers"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 31,
+      "line_end": 39,
+      "title": "Shipping fee boundaries and country fallback have no tests"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 12,
+      "title": "The only existing tests can never fail (no assertions, exception swallowed)"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 13,
+      "line_end": 13,
+      "title": "Path traversal in thumbnail source/destination paths"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 16,
+      "line_end": 24,
+      "title": "Token expiry (TOKEN_TTL) never enforced"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 26,
+      "line_end": 26,
+      "title": "Checkout never passes `member`, so member pricing never applies (VIP25 members get 5%, not 25%)"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/handlers.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Request handlers, auth, and DB/SQL access are where untrusted input reaches sensitive operations; cache may leak or mix user data."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py"
+      ],
+      "reason": "Pricing has the highest complexity yet no test importers; auth, handlers and cache are also untested."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Pricing has by far the highest complexity (ccn_max 12); db and cache follow in complexity per function."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 116943,
+  "output_tokens": 18638
+}

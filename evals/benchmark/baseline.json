@@ -1,0 +1,251 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 1.0,
+  "precision_floor": 0.5416666666666666,
+  "matched": {
+    "sqli": 0,
+    "hardcoded-secret": 3,
+    "timing-compare": 4,
+    "no-expiry": 19,
+    "shell-injection": 1,
+    "pickle": 2,
+    "unauth-checkout": 5,
+    "missing-product": 23,
+    "mutable-default": 8,
+    "file-leak": 9,
+    "no-assert": 11,
+    "swallowed": 12,
+    "pricing-untested": 14
+  },
+  "missed": [],
+  "findings": [
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "SQL injection in product search via f-string query"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 12,
+      "line_end": 13,
+      "title": "OS command injection via filename passed to shell=True"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Token signing key hardcoded in source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "HMAC signature compared with non-constant-time equality"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "Checkout proceeds when authentication fails"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "Client-supplied quantities not validated (negative qty lowers order total)"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 15,
+      "line_end": 21,
+      "title": "Client can pick any FLASH discount up to 50%"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes remember() share one hidden global store"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 11,
+      "line_end": 13,
+      "title": "load_snapshot never closes the file it opens"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 6,
+      "line_end": 10,
+      "title": "Single global SQLite connection shared across threads with no locking"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion and cannot detect wrong results"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing swallows every exception and has no assertion"
+    },
+    {
+      "file": "app/db.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "add_order total calculation and missing-product path untested"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "apply_discount branching logic (complexity 12) has no tests"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 31,
+      "line_end": 39,
+      "title": "shipping thresholds and country branches untested"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 16,
+      "line_end": 24,
+      "title": "Token verification untested, including expiry that is never enforced"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "checkout's unauthenticated path is untested and lets anonymous orders through"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Cache shared mutable default store and expiry logic untested"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 21,
+      "line_end": 23,
+      "title": "Token expiry never enforced (TOKEN_TTL unused)"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 21,
+      "line_end": 23,
+      "title": "Token expiry (TOKEN_TTL) is never enforced; signed tokens are valid forever"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "high",
+      "line_start": 25,
+      "line_end": 26,
+      "title": "Stored order total is the pre-discount amount, so it differs from the total returned to the customer"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 26,
+      "line_end": 26,
+      "title": "Checkout passes line-item count as item_count and never passes member, so the bulk and member discounts are wrong"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 28,
+      "line_end": 29,
+      "title": "add_order crashes with TypeError when a product ID does not exist"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/handlers.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/cache.py",
+        "app/pricing.py"
+      ],
+      "reason": "Request handlers, auth and DB/SQL helpers are where untrusted input arrives; the cache and pricing logic may also be exposed to it."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "app/db.py",
+        "tests/test_db.py"
+      ],
+      "reason": "Pricing (highest complexity), auth, handlers and cache have no test importers; db has only one."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/db.py",
+        "app/auth.py",
+        "app/cache.py",
+        "app/handlers.py"
+      ],
+      "reason": "Pricing dominates complexity (ccn_max 12); the others are smaller and less complex but still worth checking for defects."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 107877,
+  "output_tokens": 19224
+}

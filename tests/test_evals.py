@@ -23,6 +23,32 @@ def test_scoring_is_one_to_one_and_category_aware():
     assert s.recall == 1 / 13 and s.precision_floor == 1 / 4
 
 
+def test_known_real_anchors_resolve():
+    known = load_planted(key="known_real")
+    assert len(known) == 7 and all(k.line > 0 for k in known)
+
+
+def test_known_real_counts_for_precision_not_recall_and_never_steals_a_planted_match():
+    planted = load_planted()
+    known = load_planted(key="known_real")
+    unauth = next(p for p in planted if p.id == "unauth-checkout")
+    stored = next(k for k in known if k.id == "stored-pre-discount")
+    conn = next(k for k in known if k.id == "shared-conn")  # no other problem within SLACK of it
+    # The first finding is within SLACK of both; planted problems are matched first, so it goes to unauth.
+    findings = [
+        {"file": unauth.file, "category": "debt", "line_start": stored.line, "line_end": stored.line},
+        {"file": unauth.file, "category": "security", "line_start": unauth.line, "line_end": unauth.line},
+        {"file": conn.file, "category": "debt", "line_start": conn.line, "line_end": conn.line},
+        {"file": conn.file, "category": "debt", "line_start": conn.line, "line_end": conn.line},  # duplicate
+    ]
+    s = score(findings, planted, known)
+    assert s.matched == {"unauth-checkout": 0}
+    assert s.known == {"stored-pre-discount": 1, "shared-conn": 2}
+    assert s.recall == 1 / 13
+    assert s.unmatched == [3]  # a duplicate of a known problem is still noise
+    assert s.precision_floor == 3 / 4
+
+
 def test_hotspot_recall():
     planted = load_planted()
     files = [

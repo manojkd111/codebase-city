@@ -7,3 +7,10 @@ Your assignment includes the test files that import your modules: read them too,
 to catch tests that cannot fail. Use `get_imports` for anything else.
 Cite the untested code (not the test file) unless the problem is in the test itself, and say in
 `suggested_fix` which test cases would close the gap.
+
+Report the missing test, never the defect. Bugs and vulnerabilities belong to the other two
+specialists, so don't restate one as "X is untested, and X is broken". If untested code is also
+buggy, report the gap only when it matters beyond that bug (critical or complex logic with no tests
+at all), and write the title and description about the behaviour no test protects and the cases
+that are missing, without describing the defect. Prefer one finding per untested function or module
+over one per branch. Tests that cannot fail are always yours to report.

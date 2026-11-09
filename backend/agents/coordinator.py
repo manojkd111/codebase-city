@@ -137,15 +137,19 @@ MAX_TEST_FILES = 3
 
 
 def add_tests_for_assigned(plan: Plan, files: list[dict[str, Any]], imported_by: dict[str, list[str]]) -> None:
-    """Give the tests reviewer the test files that exercise its modules.
+    """Give the tests reviewer the test files that exercise the modules under review.
 
     Candidates exclude test files (they'd crowd out real hotspots), so without this the reviewer
-    could never see a test that can't fail. Deterministic: straight from the import graph.
+    could never see a test that can't fail. The coordinator tends to give the tests reviewer
+    *untested* modules, whose importers are by definition not tests, so the tests of every other
+    reviewer's modules are attached too: the tests reviewer's own modules first, then the rest
+    in role order. Deterministic: straight from the import graph.
     """
     tests = {f["path"] for f in files if f["is_test"]}
     assigned = plan.assignments.get("tests", [])
+    modules = list(assigned) + [p for r in ROLES if r != "tests" for p in plan.assignments.get(r, [])]
     extra: list[str] = []
-    for path in assigned:
+    for path in modules:
         for importer in imported_by.get(path, []):
             if importer in tests and importer not in extra and importer not in assigned:
                 extra.append(importer)

@@ -59,11 +59,14 @@ def agent_route(kwargs: dict[str, Any]) -> str:
     if "format" in kwargs.get("output_config", {}):
         return "coordinator"
     system = kwargs.get("system", "")
-    for role in ("security", "tests", "debt"):
-        if f"specialty is **{role}" in system or (role == "tests" and "**test gaps**" in system):
+    # Match the role prompt's own opening line only: the shared prompt names every specialty.
+    for marker, role in (
+        ("specialty is **security", "security"),
+        ("specialty is **test gaps", "tests"),
+        ("specialty is **bugs and technical debt", "debt"),
+    ):
+        if marker in system:
             return role
-    if "**bugs and technical debt" in system:
-        return "debt"
     return "other"
 
 

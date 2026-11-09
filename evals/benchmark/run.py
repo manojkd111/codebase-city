@@ -2,6 +2,7 @@
 
     .venv/Scripts/python -m evals.benchmark.run                 # full run (needs ANTHROPIC_API_KEY; costs money)
     .venv/Scripts/python -m evals.benchmark.run --metrics-only  # free: only checks the deterministic ranking
+    .venv/Scripts/python -m evals.benchmark.run --rescore evals/benchmark/baseline.json  # free: re-score a saved run
 
 Uses a throwaway SQLite DB, never the app's. The fixture is ingested as a local path (CLI-only).
 """
@@ -23,7 +24,7 @@ from backend.db.models import AnalysisRun, File, Finding, Repo
 from backend.db.session import make_engine, make_session_factory
 from backend.ingest.runner import execute_ingest
 
-from .score import HERE, hotspot_recall, load_planted, score
+from .score import HERE, Score, hotspot_recall, load_planted, score
 
 # Opus 5.5 list prices, $ per million tokens; cached input is billed lower, so this is an upper bound.
 PRICE_IN, PRICE_OUT = 4.0, 20.0
@@ -33,10 +34,17 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--metrics-only", action="store_true", help="skip the agents; score hotspot ranking only")
     ap.add_argument("--json", type=Path, help="also write the full result here")
+    ap.add_argument("--rescore", type=Path, help="re-score a saved --json result (free; no ingest, no agents)")
     args = ap.parse_args(argv)
 
-    fixture = (HERE / "planted" / "shop").resolve()
     planted = load_planted()
+    if args.rescore:
+        saved = json.loads(args.rescore.read_text(encoding="utf-8"))
+        usage = (saved.get("input_tokens", 0), saved.get("output_tokens", 0))
+        _report(saved["findings"], planted, usage)
+        return 0
+
+    fixture = (HERE / "planted" / "shop").resolve()
     # ignore_cleanup_errors: on Windows a lingering SQLite handle must not turn a result into a crash.
     with tempfile.TemporaryDirectory(prefix="cbc-bench-", ignore_cleanup_errors=True) as tmp:
         settings = replace(
@@ -88,21 +96,12 @@ def _bench(args, settings, sessions, fixture, planted) -> int:
         usage = (run.input_tokens, run.output_tokens)
         plan = run.plan  # which files each reviewer got: the first thing to check on a miss
 
-    sc = score(findings, planted)
-    cost = usage[0] / 1e6 * PRICE_IN + usage[1] / 1e6 * PRICE_OUT
-    print(f"recall: {len(sc.matched)}/{sc.total_planted} = {sc.recall:.0%}")
-    print(f"precision (floor): {len(sc.matched)}/{sc.total_findings} = {sc.precision_floor:.0%}")
-    print(f"tokens: {usage[0]:,} in / {usage[1]:,} out  (<= ${cost:.2f} at list price)")
-    for p in planted:
-        mark = "found " if p.id in sc.matched else "MISSED"
-        print(f"  {mark} {p.id:<18} {p.file}:{p.line}  {p.what}")
-    for i in sc.unmatched:
-        f = findings[i]
-        print(f"  extra  [{f['category']}] {f['file']}:{f['line_start']}  {f['title']}")
+    sc = _report(findings, planted, usage)
     result |= {
         "recall": sc.recall,
         "precision_floor": sc.precision_floor,
         "matched": sc.matched,
+        "known_real": sc.known,
         "missed": sc.missed,
         "findings": findings,
         "plan": plan,
@@ -111,6 +110,29 @@ def _bench(args, settings, sessions, fixture, planted) -> int:
     }
     _write(args.json, result)
     return 0
+
+
+def _report(findings: list[dict], planted: list, usage: tuple[int, int]) -> Score:
+    known = load_planted(key="known_real")
+    sc = score(findings, planted, known)
+    cost = usage[0] / 1e6 * PRICE_IN + usage[1] / 1e6 * PRICE_OUT
+    correct = len(sc.matched) + len(sc.known)
+    print(f"recall: {len(sc.matched)}/{sc.total_planted} = {sc.recall:.0%}")
+    print(
+        f"precision (floor): {correct}/{sc.total_findings} = {sc.precision_floor:.0%}"
+        f"  ({len(sc.matched)} planted + {len(sc.known)} known-real)"
+    )
+    print(f"tokens: {usage[0]:,} in / {usage[1]:,} out  (<= ${cost:.2f} at list price)")
+    for p in planted:
+        mark = "found " if p.id in sc.matched else "MISSED"
+        print(f"  {mark} {p.id:<20} {p.file}:{p.line}  {p.what}")
+    for k in known:
+        if k.id in sc.known:
+            print(f"  known  {k.id:<20} {k.file}:{k.line}  {k.what}")
+    for i in sc.unmatched:
+        f = findings[i]
+        print(f"  extra  [{f['category']}] {f['file']}:{f['line_start']}  {f['title']}")
+    return sc
 
 
 def _write(path: Path | None, data: dict) -> None:

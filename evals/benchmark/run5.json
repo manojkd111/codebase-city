@@ -1,0 +1,222 @@
+{
+  "hotspot_recall_top5": 1.0,
+  "recall": 1.0,
+  "precision_floor": 0.85,
+  "matched": {
+    "sqli": 4,
+    "hardcoded-secret": 7,
+    "timing-compare": 8,
+    "no-expiry": 17,
+    "shell-injection": 5,
+    "pickle": 6,
+    "unauth-checkout": 1,
+    "missing-product": 0,
+    "mutable-default": 2,
+    "file-leak": 3,
+    "no-assert": 10,
+    "swallowed": 11,
+    "pricing-untested": 12
+  },
+  "known_real": {
+    "negative-qty": 19,
+    "shared-conn": 9,
+    "shipping-untested": 13,
+    "stored-pre-discount": 18
+  },
+  "missed": [],
+  "findings": [
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "add_order crashes with TypeError when a product id doesn't exist"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 25,
+      "line_end": 26,
+      "title": "Persisted order total is pre-discount while customer is quoted discounted total"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "medium",
+      "line_start": 5,
+      "line_end": 7,
+      "title": "Mutable default argument makes remember() share one global store across all callers"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 11,
+      "line_end": 13,
+      "title": "load_snapshot leaks the file handle"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 15,
+      "line_end": 16,
+      "title": "SQL injection in product search via f-string query"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 12,
+      "line_end": 13,
+      "title": "Shell command injection via `file` parameter in make_thumbnail"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "critical",
+      "line_start": 18,
+      "line_end": 18,
+      "title": "Unsafe pickle deserialization of request body"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 5,
+      "line_end": 5,
+      "title": "Hardcoded HMAC signing key committed to source"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 22,
+      "title": "Non-constant-time comparison of HMAC signature"
+    },
+    {
+      "file": "app/db.py",
+      "category": "debt",
+      "severity": "low",
+      "line_start": 6,
+      "line_end": 10,
+      "title": "Single global sqlite connection shared across threads without locking; path ignored after first call"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 4,
+      "line_end": 5,
+      "title": "test_find_products_runs has no assertion and cannot fail on wrong results"
+    },
+    {
+      "file": "tests/test_db.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 8,
+      "line_end": 12,
+      "title": "test_get_product_missing swallows all exceptions and asserts nothing"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 4,
+      "line_end": 28,
+      "title": "Discount calculation (apply_discount) has no tests despite many branches"
+    },
+    {
+      "file": "app/pricing.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 31,
+      "line_end": 39,
+      "title": "Shipping cost tiers and the US free-shipping boundary are untested"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "tests",
+      "severity": "high",
+      "line_start": 16,
+      "line_end": 24,
+      "title": "Token signing and verification have no tests"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "tests",
+      "severity": "medium",
+      "line_start": 22,
+      "line_end": 26,
+      "title": "HTTP handlers, including checkout, have no tests"
+    },
+    {
+      "file": "app/cache.py",
+      "category": "tests",
+      "severity": "low",
+      "line_start": 16,
+      "line_end": 18,
+      "title": "Cache expiry filtering and store isolation are untested"
+    },
+    {
+      "file": "app/auth.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 21,
+      "line_end": 23,
+      "title": "Token expiry (TOKEN_TTL) never enforced; tokens valid forever"
+    },
+    {
+      "file": "app/handlers.py",
+      "category": "security",
+      "severity": "high",
+      "line_start": 23,
+      "line_end": 25,
+      "title": "Checkout proceeds without authentication when token verification fails"
+    },
+    {
+      "file": "app/db.py",
+      "category": "security",
+      "severity": "medium",
+      "line_start": 27,
+      "line_end": 29,
+      "title": "Client-supplied quantities not validated, allowing negative or zero order totals"
+    }
+  ],
+  "plan": {
+    "security": {
+      "files": [
+        "app/handlers.py",
+        "app/auth.py",
+        "app/db.py",
+        "app/cache.py"
+      ],
+      "reason": "Request handlers, auth and DB/SQL access are the most likely places for untrusted input to reach a vulnerability. The cache could leak or poison data."
+    },
+    "tests": {
+      "files": [
+        "app/pricing.py",
+        "app/auth.py",
+        "app/handlers.py",
+        "app/cache.py",
+        "tests/test_db.py"
+      ],
+      "reason": "None of these files has a test that imports it, and pricing has the most branching logic left uncovered."
+    },
+    "debt": {
+      "files": [
+        "app/pricing.py",
+        "app/cache.py",
+        "app/auth.py",
+        "app/db.py"
+      ],
+      "reason": "Pricing has the highest complexity in the codebase (ccn_max 12); the cache and auth have moderate branching where bugs could hide."
+    },
+    "used_fallback": false
+  },
+  "input_tokens": 87333,
+  "output_tokens": 15003
+}
