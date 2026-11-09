@@ -7,6 +7,7 @@ import { districtAccents, districtKind, KIND_LABEL } from "./districts";
 import { Environment } from "./Environment";
 import { layoutCity, riskColor, type CityLayout, type Placed } from "./layout";
 import type { ImportNeighbors, Road } from "./types";
+import { makeBuildingMaterial } from "./windows";
 import type { AgentState, FindingMark, FixState, Spawned } from "./useCityStream";
 import type { District } from "./types";
 
@@ -148,6 +149,8 @@ function Buildings({
   );
   const ref = useRef<THREE.InstancedMesh>(null);
   const dirty = useRef(true);
+  const material = useMemo(makeBuildingMaterial, []); // windows are drawn in its shader
+  useEffect(() => () => material.dispose(), [material]);
 
   useEffect(() => {
     dirty.current = true;
@@ -216,7 +219,7 @@ function Buildings({
       }}
     >
       <boxGeometry />
-      <meshStandardMaterial roughness={0.75} metalness={0.05} />
+      <primitive object={material} attach="material" />
     </instancedMesh>
   );
 }
